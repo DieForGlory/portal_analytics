@@ -1,0 +1,95 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="mb-0">{{ _('Просмотр Версии №') }}{{ version.version_number }}</h1>
+        <p class="text-muted">{{ version.comment }}</p>
+    </div>
+    <a href="{{ url_for('discount.versions_index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> {{ _('К списку версий') }}
+    </a>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <input type="text" id="searchComplex" class="form-control" placeholder="{{ _('Поиск по названию ЖК...') }}">
+    </div>
+    <div class="col-md-6">
+        <select id="filterPropType" class="form-select">
+            <option value="">{{ _('Все типы недвижимости') }}</option>
+            <option value="flat">{{ _('Квартира') }}</option>
+            <option value="comm">{{ _('Коммерческое помещение') }}</option>
+            <option value="garage">{{ _('Парковка') }}</option>
+            <option value="storageroom">{{ _('Кладовое помещение') }}</option>
+        </select>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-bordered table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>{{ _('ЖК') }}</th>
+                <th>{{ _('Тип недв.') }}</th>
+                <th>{{ _('Тип оплаты') }}</th>
+                <th>{{ _('МПП (%%)') }}</th>
+                <th>{{ _('РОП (%%)') }}</th>
+                <th>{{ _('КД (%%)') }}</th>
+                <th>{{ _('Акция (%%)') }}</th>
+            </tr>
+        </thead>
+        <tbody id="discountsTableBody">
+            {% for discount in discounts %}
+            <tr data-complex="{{ discount.complex_name|lower }}" data-prop-type="{{ discount.property_type.value|lower }}">
+                <td>{{ discount.complex_name }}</td>
+                <td>{{ discount.property_type.value }}</td>
+                <td>{{ discount.payment_method.value }}</td>
+                <td>{% if discount.mpp > 0 %}{{ "%.1f"|format(discount.mpp * 100) }}%{% else %}—{% endif %}</td>
+                <td>{% if discount.rop > 0 %}{{ "%.1f"|format(discount.rop * 100) }}%{% else %}—{% endif %}</td>
+                <td>{% if discount.kd > 0 %}{{ "%.1f"|format(discount.kd * 100) }}%{% else %}—{% endif %}</td>
+                <td>{% if discount.action > 0 %}{{ "%.1f"|format(discount.action * 100) }}%{% else %}—{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="text-center">{{ _('В этой версии нет данных о скидках.') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchComplex');
+    const propTypeFilter = document.getElementById('filterPropType');
+    const tableRows = document.querySelectorAll('#discountsTableBody tr');
+
+    function applyFilters() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const propType = propTypeFilter.value.toLowerCase();
+        tableRows.forEach(row => {
+            if (row.dataset.complex && row.dataset.propType) {
+                const complexMatch = row.dataset.complex.includes(searchTerm);
+                // Примечание: значения в фильтре 'flat', 'comm' и т.д. должны быть переведены в JS, если потребуется,
+                // либо сравнивать с оригинальными значениями, как здесь.
+                const propTypeMatch = propType === '' || row.dataset.propType === propType;
+                if (complexMatch && propTypeMatch) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    if (searchInput && propTypeFilter) {
+        searchInput.addEventListener('input', applyFilters);
+        propTypeFilter.addEventListener('change', applyFilters);
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+    <h2>{{ _('Загрузка плановых показателей (Excel)') }}</h2>
+    <p class="text-muted">
+        {{ _('Вы можете скачать актуальный шаблон с названиями всех ЖК, чтобы заполнить его и загрузить обратно в систему.') }}
+    </p>
+
+    <a href="{{ url_for('report.download_plan_template') }}" class="btn btn-golden-outline w-20">
+        <i class="bi bi-download"></i>
+        {{ _('Скачать шаблон') }}
+    </a>
+    <hr>
+
+    <form method="POST" enctype="multipart/form-data" class="card card-glass p-4">
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">
+                {{ form.excel_file.label(class="form-label") }}
+                {{ form.excel_file(class="form-control") }}
+            </div>
+            <div class="col-md-3">
+                {{ form.year.label(class="form-label") }}
+                {{ form.year(class="form-control") }}
+            </div>
+            <div class="col-md-3">
+                {{ form.month.label(class="form-label") }}
+                {{ form.month(class="form-select") }}
+            </div>
+            <div class="col-12 mt-4">
+                {{ form.submit(class="btn btn-warning") }}
+            </div>
+        </div>
+    </form>
+{% endblock %}

@@ -1,0 +1,336 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<form id="discounts-form" method="POST" action="{{ url_for('discount.edit_version', version_id=version.id) }}">
+    <input type="hidden" name="changes_json" id="changes_json_input">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">{{ _('Редактирование Версии №') }}{{ version.version_number if version else 'N/A' }}</h1>
+            <p class="text-muted mb-1">
+                <strong>{{ _('Комментарий') }}:</strong> {{ version.comment or _('Без комментария') }}
+            </p>
+            <p class="text-muted small">
+                {# Добавляем отображение даты создания в нужном формате #}
+                <strong>{{ _('Создана') }}:</strong> {{ version.created_at.strftime('%Y-%m-%d %H:%M') if version.created_at else _('Еще не сохранено') }}
+            </p>
+        </div>
+        <a href="{{ url_for('discount.versions_index') }}" class="btn btn-golden-outline w-20">
+            <i class="bi bi-arrow-left"></i> {{ _('К списку версий') }}
+        </a>
+    </div>
+
+    <div class="my-4">
+        <button type="button" class="btn btn-golden-outline w-100" data-bs-toggle="modal" data-bs-target="#complexListModal">
+            <i class="bi bi-chat-left-text-fill"></i>
+            {{ _('Посмотреть и отредактировать комментарии к ЖК') }}
+        </button>
+    </div>
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <input type="text" id="searchComplex" class="form-control" placeholder="{{ _('Поиск по названию ЖК...') }}">
+        </div>
+        <div class="col-md-6">
+            <select id="filterPropType" class="form-select">
+                <option value="">{{ _('Все типы недвижимости') }}</option>
+                <option value="Квартира">{{ _('Квартира') }}</option>
+                <option value="Коммерческое помещение">{{ _('Коммерческое помещение') }}</option>
+                <option value="Парковка">{{ _('Парковка') }}</option>
+                <option value="Кладовое помещение">{{ _('Кладовое помещение') }}</option>
+            </select>
+        </div>
+    </div>
+
+    <button type="button" id="save-changes-btn-top" class="btn btn-golden-outline w-20 sticky-top">
+        <i class="bi bi-save"></i> {{ _('Сохранить все изменения') }}
+    </button>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>{{ _('ЖК') }}</th>
+                    <th>{{ _('Тип недв.') }}</th>
+                    <th>{{ _('Тип оплаты') }}</th>
+                    <th>{{ _('МПП (%%)') }}</th>
+                    <th>{{ _('РОП (%%)') }}</th>
+                    <th>{{ _('КД (%%)') }}</th>
+                    <th>{{ _('Акция (%%)') }}</th>
+                </tr>
+            </thead>
+            <tbody id="discountsTableBody">
+                {% for discount in discounts %}
+                <tr data-complex="{{ discount.complex_name|lower }}" data-prop-type="{{ discount.property_type.value|lower }}">
+                    <td>{{ discount.complex_name }}</td>
+                    <td>{{ discount.property_type.value }}</td>
+                    <td>{{ discount.payment_method.value }}</td>
+                    {% set key = discount.complex_name ~ '|' ~ discount.property_type.value ~ '|' ~ discount.payment_method.value %}
+                    <td><input type="number" step="1" class="form-control editable" data-field-name="{{ _('МПП') }}" name="discount-{{ key }}-mpp" value="{{ (discount.mpp * 100) | int }}"></td>
+                    <td><input type="number" step="1" class="form-control editable" data-field-name="{{ _('РОП') }}" name="discount-{{ key }}-rop" value="{{ (discount.rop * 100) | int}}"></td>
+                    <td><input type="number" step="1" class="form-control editable" data-field-name="{{ _('КД') }}" name="discount-{{ key }}-kd" value="{{ (discount.kd * 100) | int}}"></td>
+                    <td><input type="number" step="1" class="form-control editable" data-field-name="{{ _('Акция') }}" name="discount-{{ key }}-action" value="{{ (discount.action * 100) | int}}"></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center">{{ _('В этой версии еще нет данных о скидках.') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <button type="button" id="save-changes-btn-bottom" class="btn btn-warning mt-3">
+        <i class="bi bi-save"></i> {{ _('Сохранить все изменения') }}
+    </button>
+</form>
+
+<div class="modal fade" id="summaryModal" tabindex="-1" aria-labelledby="summaryModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="summaryModalLabel">{{ _('Обзор и подтверждение изменений') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="summaryModalBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Отмена') }}</button>
+        <button type="button" id="confirm-save-btn" class="btn btn-warning">{{ _('Подтвердить и сохранить') }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="complexListModal" tabindex="-1" aria-labelledby="complexListModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="complexListModalLabel">{{ _('Комментарии к ЖК в этой версии') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="list-group list-group-flush">
+            {% for complex_name in discounts | map(attribute='complex_name') | unique | sort %}
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-building me-2"></i>{{ complex_name }}
+                </span>
+                <button type="button" class="btn btn-outline-secondary btn-sm"
+                        data-bs-toggle="modal" data-bs-target="#commentModal"
+                        data-bs-dismiss="modal"
+                        data-complex-name="{{ complex_name }}">
+                    <i class="bi bi-pencil"></i>
+                    <span class="d-none d-sm-inline">{{ _('Редактировать') }}</span>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Закрыть') }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="commentModal" tabindex="-1" aria-labelledby="commentModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="commentModalLabel">{{ _('Комментарий для ЖК:') }} <span id="commentModalComplexName"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+          <input type="hidden" id="commentModalComplexNameInput">
+          <textarea class="form-control" id="commentModalTextarea" rows="4" placeholder="{{ _('Введите комментарий для этого ЖК...') }}"></textarea>
+          <div id="comment-alert-placeholder"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Закрыть') }}</button>
+        <button type="button" id="saveCommentBtn" class="btn btn-primary">{{ _('Сохранить комментарий') }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Передаем комментарии из Flask в JavaScript
+const complexComments = {{ complex_comments|tojson|safe if complex_comments is defined else '{}' }};
+
+document.addEventListener('DOMContentLoaded', function() {
+    // --- ВСЯ ЛОГИКА ДЛЯ МОДАЛЬНОГО ОКНА КОММЕНТАРИЕВ К ЖК ---
+    const commentModal = document.getElementById('commentModal');
+    if(commentModal) {
+        commentModal.addEventListener('show.bs.modal', event => {
+            const button = event.relatedTarget;
+            const complexName = button.dataset.complexName;
+
+            document.getElementById('commentModalComplexName').textContent = complexName;
+            document.getElementById('commentModalComplexNameInput').value = complexName;
+
+            // Заполняем textarea существующим комментарием или оставляем пустой
+            document.getElementById('commentModalTextarea').value = complexComments[complexName] || '';
+            document.getElementById('comment-alert-placeholder').innerHTML = '';
+        });
+
+        document.getElementById('saveCommentBtn').addEventListener('click', () => {
+            const complexName = document.getElementById('commentModalComplexNameInput').value;
+            const commentText = document.getElementById('commentModalTextarea').value;
+            const versionId = {{ version.id }};
+
+            fetch("{{ url_for('discount.save_complex_comment') }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    version_id: versionId,
+                    complex_name: complexName,
+                    comment: commentText
+                })
+            }).then(response => response.json())
+              .then(data => {
+                  if(data.success) {
+                      // Обновляем наш JS-объект с комментариями
+                      complexComments[complexName] = commentText;
+                      // Показываем уведомление об успехе
+                      const alertPlaceholder = document.getElementById('comment-alert-placeholder');
+                      alertPlaceholder.innerHTML = `<div class="alert alert-success mt-3">{{ _('Комментарий сохранен.') }}</div>`;
+                      setTimeout(() => { alertPlaceholder.innerHTML = ''}, 2000);
+                  }
+              });
+        });
+    }
+
+    // --- ВСЯ ЛОГИКА ДЛЯ ОСНОВНОЙ ФОРМЫ СОХРАНЕНИЯ СКИДОК ---
+    const initialValues = {};
+    const editableInputs = document.querySelectorAll('.editable');
+
+    editableInputs.forEach(input => {
+        initialValues[input.name] = input.value;
+        input.addEventListener('input', () => {
+             if (input.value !== initialValues[input.name]) {
+                input.parentElement.style.backgroundColor = 'rgba(255, 193, 7, 0.3)';
+            } else {
+                input.parentElement.style.backgroundColor = '';
+            }
+        });
+    });
+
+    function prepareAndShowSummaryModal() {
+        const changes = {};
+        editableInputs.forEach(input => {
+            if (input.value !== initialValues[input.name]) {
+                const row = input.closest('tr');
+                const complex = row.dataset.complex;
+                const propType = row.dataset.propType;
+                const groupKey = `${complex}___${propType}`;
+
+                if (!changes[groupKey]) {
+                    changes[groupKey] = {
+                        complex: complex,
+                        propType: propType,
+                        modifications: []
+                    };
+                }
+
+                changes[groupKey].modifications.push({
+                    paymentMethod: row.cells[2].textContent.trim(),
+                    fieldName: input.dataset.fieldName,
+                    oldValue: initialValues[input.name],
+                    newValue: input.value
+                });
+            }
+        });
+
+        const modalBody = document.getElementById('summaryModalBody');
+
+        if (Object.keys(changes).length === 0) {
+            alert("{{ _('Изменений для сохранения не найдено.') }}");
+            return;
+        }
+
+        let html = `<p>{{ _('Пожалуйста, опишите причину внесенных изменений для каждой группы.') }}</p>`;
+        Object.entries(changes).forEach(([key, group], index) => {
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <strong>${group.complex}</strong> - <span class="badge bg-info-subtle text-info-emphasis">${group.propType}</span>
+                    </div>
+                    <div class="card-body">
+                        <h6>{{ _('Изменения:') }}</h6>
+                        <ul>
+                            ${group.modifications.map(mod => `<li><strong>${mod.paymentMethod}</strong> - {{ _('поле') }} "${mod.fieldName}" {{ _('изменено с') }} ${mod.oldValue}% {{ _('на') }} <strong>${mod.newValue}%</strong></li>`).join('')}
+                        </ul>
+                        <div class="mt-2">
+                            <label for="comment-${index}" class="form-label"><strong>{{ _('Комментарий к этой группе (обязательно):') }}</strong></label>
+                            <textarea class="form-control comment-input" id="comment-${index}" data-group-key="${key}" rows="2" required></textarea>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        modalBody.innerHTML = html;
+
+        window.pendingChanges = changes;
+
+        const summaryModal = new bootstrap.Modal(document.getElementById('summaryModal'));
+        summaryModal.show();
+    }
+
+    document.getElementById('save-changes-btn-top').addEventListener('click', prepareAndShowSummaryModal);
+    document.getElementById('save-changes-btn-bottom').addEventListener('click', prepareAndShowSummaryModal);
+
+    document.getElementById('confirm-save-btn').addEventListener('click', function() {
+        const commentTextareas = document.querySelectorAll('.comment-input');
+        let allCommentsFilled = true;
+
+        commentTextareas.forEach(textarea => {
+            if (!textarea.value.trim()) {
+                allCommentsFilled = false;
+                textarea.classList.add('is-invalid');
+            } else {
+                textarea.classList.remove('is-invalid');
+                const groupKey = textarea.dataset.groupKey;
+                if(window.pendingChanges[groupKey]) {
+                    window.pendingChanges[groupKey].comment = textarea.value.trim();
+                }
+            }
+        });
+
+        if (!allCommentsFilled) {
+            alert("{{ _('Пожалуйста, заполните комментарии для всех групп изменений.') }}");
+            return;
+        }
+
+        document.getElementById('changes_json_input').value = JSON.stringify(window.pendingChanges);
+        document.getElementById('discounts-form').submit();
+    });
+
+    // --- ЛОГИКА ФИЛЬТРАЦИИ И ПОИСКА ---
+    const searchInput = document.getElementById('searchComplex');
+    const propTypeFilter = document.getElementById('filterPropType');
+    const tableRows = document.querySelectorAll('#discountsTableBody tr');
+
+    function applyFilters() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const propType = propTypeFilter.value.toLowerCase();
+        tableRows.forEach(row => {
+            if (row.dataset.complex && row.dataset.propType) {
+                const complexMatch = row.dataset.complex.toLowerCase().includes(searchTerm);
+                const propTypeMatch = propType === '' || row.dataset.propType === propType;
+                if (complexMatch && propTypeMatch) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    if (searchInput && propTypeFilter) {
+        searchInput.addEventListener('input', applyFilters);
+        propTypeFilter.addEventListener('change', applyFilters);
+    }
+});
+</script>
+{% endblock %}

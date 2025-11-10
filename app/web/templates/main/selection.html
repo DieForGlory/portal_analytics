@@ -1,0 +1,257 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<h1 class="mb-4">{{ _('Система подбора квартир по бюджету') }}</h1>
+<div class="card card-glass mb-4">
+    <div class="card-body">
+        <form action="{{ url_for('main.search_by_id') }}" method="POST" class="row g-3 align-items-center">
+            <div class="col-auto">
+                <label for="search_id" class="visually-hidden">{{ _('ID Объекта') }}</label>
+                <input type="number" class="form-control" id="search_id" name="search_id" placeholder="{{ _('Введите ID объекта...') }}">
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-golden-outline btn-lg w-100">
+                    <i class="bi bi-search"></i> {{ _('Найти') }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="card card-glass">
+<div class="card mb-4 card-glass">
+    <div class="card-body">
+        <form method="POST">
+            <div class="row align-items-end g-3">
+                <div class="col-md-4">
+                    <label for="budget" class="form-label">{{ _('Сумма клиента на руках') }}</label>
+                    <input type="number" class="form-control form-control-lg" id="budget" name="budget" step="any" required
+                           value="{{ request.form.budget or '' }}">
+                </div>
+                <div class="col-md-2">
+                    <label for="currency" class="form-label">{{ _('Валюта') }}</label>
+                    <select class="form-select form-select-lg" id="currency" name="currency">
+                        <option value="USD" {% if request.form.currency == 'USD' %}selected{% endif %}>USD ($)</option>
+                        <option value="UZS" {% if request.form.currency == 'UZS' %}selected{% endif %}>UZS</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="property_type" class="form-label">{{ _('Тип недвижимости') }}</label>
+                    <select class="form-select form-select-lg" id="property_type" name="property_type" required>
+                        {% for pt in property_types %}
+                        <option value="{{ pt.value }}" {% if request.form.property_type == pt.value %}selected{% endif %}>{{ _(pt.value) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-golden-outline w-100">
+                        <i class="bi bi-calculator-fill"></i> {{ _('Найти') }}
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <label for="floor" class="form-label">{{ _('Этаж') }}</label>
+                    <select class="form-select" id="floor" name="floor">
+                        <option value="">{{ _('Любой') }}</option>
+                        {% for f in filter_options.floors %}
+                            <option value="{{ f }}" {% if request.form.floor == f|string %}selected{% endif %}>{{ f }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="rooms" class="form-label">{{ _('Количество комнат') }}</label>
+                    <select class="form-select" id="rooms" name="rooms">
+                        <option value="">{{ _('Любое') }}</option>
+                        {% for r in filter_options.rooms %}
+                            <option value="{{ r }}" {% if request.form.rooms == r|string %}selected{% endif %}>{{ r }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="payment_method" class="form-label">{{ _('Вид оплаты') }}</label>
+                    <select class="form-select" id="payment_method" name="payment_method">
+                        <option value="">{{ _('Любой') }}</option>
+                        {% for pm in payment_methods %}
+                            <option value="{{ pm.value }}" {% if request.form.payment_method == pm.value %}selected{% endif %}>
+                                {# --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ --- #}
+                                {% if pm.value == '100% оплата' %}{{ _('100%% оплата') }}{%
+                                elif pm.value == 'Ипотека' %}{{ _('Ипотека') }}{%
+                                else %}{{ pm.value }}{% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# ... остальная часть файла без изменений ... #}
+{% if results is not none %}
+    {% if results %}
+        <h2 class="mt-5 mb-3">{{ _('Результаты подбора') }}</h2>
+        {# Уровень 1: Жилой комплекс #}
+        <div class="accordion" id="complexAccordion">
+            {% for complex_name, complex_data in results.items() %}
+            {# Сохраняем индекс текущего ЖК #}
+            {% set complex_idx = loop.index %}
+            <div class="accordion-item mb-3 card-glass"> {# Добавляем card-glass для стиля #}
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#complexCollapse-{{ complex_idx }}">
+                        <strong class="fs-5">{{ complex_name }}</strong>
+                        <span class="ms-auto badge bg-success-subtle border border-success-subtle text-success-emphasis me-2 fs-6">{{ complex_data.total_matches }}</span>
+                        <span class="text-muted" style="font-size: 0.9rem;">{{ _('квартир найдено') }}</span>
+                    </button>
+                </h2>
+                <div id="complexCollapse-{{ complex_idx }}" class="accordion-collapse collapse" data-bs-parent="#complexAccordion">
+                    <div class="accordion-body p-0"> {# Убираем padding для вложенных аккордеонов #}
+                        {# Уровень 2: Вид оплаты #}
+                        <div class="accordion accordion-flush" id="paymentAccordion-{{ complex_idx }}"> {# ID родительского аккордеона #}
+                            {% for payment_method, payment_data in complex_data.by_payment_method.items() %}
+                            {# Сохраняем индекс текущего Вида оплаты #}
+                            {% set payment_idx = loop.index %}
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    {# data-bs-target: combines parent index with current index #}
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#paymentCollapse-{{ complex_idx }}-{{ payment_idx }}">
+                                        {# --- ИЗМЕНЕНИЕ ДЛЯ РЕЗУЛЬТАТОВ ПОИСКА --- #}
+                                        <strong class="fs-6">
+                                            {% if payment_method == '100% оплата' %}{{ _('100%% оплата') }}{%
+                                            elif payment_method == 'Ипотека' %}{{ _('Ипотека') }}{%
+                                            else %}{{ payment_method }}{% endif %}
+                                        </strong>
+                                        <span class="ms-auto badge bg-info-subtle border border-info-subtle text-info-emphasis me-2">{{ payment_data.total }}</span>
+                                        <span class="text-muted" style="font-size: 0.8rem;">{{ _('объектов') }}</span>
+                                    </button>
+                                </h2>
+                                {# id: combines parent index with current index #}
+                                <div id="paymentCollapse-{{ complex_idx }}-{{ payment_idx }}" class="accordion-collapse collapse" data-bs-parent="#paymentAccordion-{{ complex_idx }}">
+                                    <div class="accordion-body p-0"> {# Убираем padding для вложенных аккордеонов #}
+                                        {# Уровень 3: Количество комнат #}
+                                        <div class="accordion accordion-flush" id="roomsAccordion-{{ complex_idx }}-{{ payment_idx }}"> {# ID родительского аккордеона #}
+                                            {% for rooms, apartments in payment_data.by_rooms.items()|sort %}
+                                            {# Сохраняем индекс текущего Количество комнат #}
+                                            {% set rooms_idx = loop.index %}
+                                            <div class="accordion-item">
+                                                <h2 class="accordion-header">
+                                                    {# data-bs-target: combines all parent indices with current index #}
+                                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#roomsCollapse-{{ complex_idx }}-{{ payment_idx }}-{{ rooms_idx }}">
+                                                        <strong class="fs-6">{{ rooms }}-{{ _('комнатные') }}</strong>
+                                                        <span class="ms-auto badge bg-dark text-white me-2">{{ apartments|length }}</span>
+                                                        <span class="text-muted" style="font-size: 0.7rem;">{{ _('квартир') }}</span>
+                                                    </button>
+                                                </h2>
+                                                {# id: combines all parent indices with current index #}
+                                                <div id="roomsCollapse-{{ complex_idx }}-{{ payment_idx }}-{{ rooms_idx }}" class="accordion-collapse collapse" data-bs-parent="#roomsAccordion-{{ complex_idx }}-{{ payment_idx }}">
+                                                    <div class="accordion-body pt-3 pb-1 px-3"> {# Возвращаем немного padding для списка квартир #}
+                                                        {# Уровень 4: Детали квартир (Таблица) #}
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm table-hover mb-0">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>{{ _('ID') }}</th>
+                                                                        <th>{{ _('Этаж') }}</th>
+                                                                        <th>{{ _('Площадь') }}</th>
+                                                                        <th>{{ _('Первый платеж (UZS)') }}</th>
+                                                                        <th>{{ _('Сумма договора (UZS)') }}</th>
+                                                                        <th>{{ _('Действие') }}</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {% for apt in apartments %}
+                                                                    <tr>
+                                                                        <td>{{ apt.id }}</td>
+                                                                        <td>{{ apt.floor }}</td>
+                                                                        <td>{{ apt.area }} м²</td>
+                                                                        <td>
+                                                                            {% if apt.initial_payment %}
+                                                                                <strong>{{ "{:,.0f}".format(apt.initial_payment) }}</strong>
+                                                                                <small class="text-muted d-block">({{ _('Первоначальный взнос') }})</small>
+                                                                            {% else %}
+                                                                                <strong>{{ "{:,.0f}".format(apt.final_price) }}</strong>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                        <td><strong>{{ "{:,.0f}".format(apt.final_price) }}</strong></td>
+                                                                        <td>
+                                                                            <a href="{{ url_for('main.apartment_details', sell_id=apt.id) }}" class="btn btn-sm btn-outline-primary">
+                                                                                <i class="bi bi-card-text"></i> {{ _('Детали') }}
+                                                                            </a>
+                                                                        </td>
+                                                                    </tr>
+                                                                    {% endfor %}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-warning mt-4">
+            <h4 class="alert-heading">{{ _('Ничего не найдено') }}</h4>
+            <p>{{ _('По вашему запросу не найдено ни одной подходящей квартиры. Попробуйте увеличить сумму бюджета или смягчить условия фильтрации.') }}</p>
+        </div>
+    {% endif %}
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<style>
+    /* Кастомные стили для уровней аккордеона */
+    /* Уровень 1: ЖК */
+    #complexAccordion .accordion-button {
+        background-color: var(--gh-element-bg); /* Цвет фона из темы */
+        color: var(--gh-header-color); /* Цвет текста из темы */
+        border-bottom: 1px solid rgba(var(--bs-border-color-rgb), 0.2);
+    }
+    #complexAccordion .accordion-button:not(.collapsed) {
+        background-color: rgba(var(--gh-gold-rgb), 0.1);
+        color: var(--gh-gold);
+    }
+
+    /* Уровень 2: Вид оплаты */
+    #complexAccordion .accordion-collapse .accordion-item .accordion-button {
+        background-color: var(--bs-tertiary-bg); /* Более светлый фон */
+        color: var(--bs-body-color);
+        padding-left: 2rem; /* Отступ для вложенности */
+        border-bottom: 1px solid rgba(var(--bs-border-color-rgb), 0.1);
+    }
+    #complexAccordion .accordion-collapse .accordion-item .accordion-button:not(.collapsed) {
+        background-color: rgba(var(--bs-primary-rgb), 0.1); /* Синий акцент */
+        color: var(--bs-primary);
+    }
+
+    /* Уровень 3: Количество комнат */
+    #complexAccordion .accordion-collapse .accordion-collapse .accordion-item .accordion-button {
+        /* Убраны background-color и color, полагаемся на bg-body-tertiary text-emphasis */
+        padding-left: 3rem; /* Отступ для вложенности */
+        border-bottom: 1px solid rgba(var(--bs-border-color-rgb), 0.05);
+    }
+    #complexAccordion .accordion-collapse .accordion-collapse .accordion-item .accordion-button:not(.collapsed) {
+        background-color: rgba(var(--bs-secondary-rgb), 0.1); /* Серый акцент */
+        color: var(--bs-secondary);
+    }
+
+    /* Уровень 4: Детали квартиры (таблица) */
+    #complexAccordion .accordion-collapse .accordion-collapse .accordion-collapse .accordion-body {
+        background-color: var(--gh-element-bg); /* Фон основной карточки */
+        padding: 1rem;
+        border-top: 1px solid rgba(var(--bs-border-color-rgb), 0.05);
+    }
+    #complexAccordion .accordion-collapse .accordion-collapse .accordion-collapse .accordion-body table {
+        --bs-table-bg: transparent; /* Прозрачный фон таблицы */
+        --bs-table-hover-bg: rgba(var(--bs-primary-rgb), 0.05); /* Легкий hover */
+    }
+</style>
+{% endblock %}

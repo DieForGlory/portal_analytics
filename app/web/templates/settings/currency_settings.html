@@ -1,0 +1,61 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<h1 class="mb-4">{{ _('Настройки курса валют') }}</h1>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card card-glass h-100">
+            <div class="card-header">
+                <h5 class="mb-0">{{ _('Текущее состояние') }}</h5>
+            </div>
+            <div class="card-body">
+                <h3>{{ _('Актуальный курс:') }} <span class="text-primary">{{ "{:,.2f}".format(settings.effective_rate) }}</span> UZS</h3>
+                <hr>
+                <p class="mb-1"><strong>{{ _('Источник курса:') }}</strong>
+                    {% if settings.rate_source == 'cbu' %}
+                        <span class="badge bg-info">{{ _('Центральный Банк') }}</span>
+                    {% else %}
+                        <span class="badge bg-warning">{{ _('Ручной') }}</span>
+                    {% endif %}
+                </p>
+                <p class="mb-1"><strong>{{ _('Курс ЦБ:') }}</strong> {{ "{:,.2f}".format(settings.cbu_rate) }} UZS</p>
+                <p class="text-muted small">{{ _('Последнее обновление от ЦБ:') }} {{ settings.cbu_last_updated.strftime('%d.%m.%Y %H:%M') if settings.cbu_last_updated else _('Никогда') }}</p>
+                <p class="mb-1"><strong>{{ _('Ручной курс:') }}</strong> {{ "{:,.2f}".format(settings.manual_rate) }} UZS</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card card-glass mb-4">
+            <div class="card-header"><h5 class="mb-0">{{ _('1. Выберите источник курса') }}</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="rate_source" id="source_cbu" value="cbu" {% if settings.rate_source == 'cbu' %}checked{% endif %}>
+                        <label class="form-check-label" for="source_cbu">{{ _('Курс Центрального Банка (обновляется автоматически)') }}</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="rate_source" id="source_manual" value="manual" {% if settings.rate_source == 'manual' %}checked{% endif %}>
+                        <label class="form-check-label" for="source_manual">{{ _('Ручной курс') }}</label>
+                    </div>
+                    <button type="submit" name="set_source" class="btn btn-primary mt-3">{{ _('Сохранить источник') }}</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card card-glass">
+            <div class="card-header"><h5 class="mb-0">{{ _('2. Установите ручной курс') }}</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="manual_rate" class="form-label">{{ _('Введите значение (например, 12700.50)') }}</label>
+                        <input type="text" class="form-control" name="manual_rate" id="manual_rate" value="{{ settings.manual_rate }}">
+                    </div>
+                    <button type="submit" name="set_manual_rate" class="btn btn-secondary">{{ _('Установить ручной курс') }}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

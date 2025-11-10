@@ -1,0 +1,285 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+    {{ super() }}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/report_style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_dashboard_style.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="gradient-heading mb-0">{{ data.complex_name }}</h1>
+        {# --- ИЗМЕНЕНИЕ 1 --- #}
+        <p class="text-muted mb-0">{{ _('Аналитический дашборд проекта') }}</p>
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            {# --- ИЗМЕНЕНИЕ 2 --- #}
+            <h1 class="mb-0">{{ _('Аналитика по проекту:') }} {{ data.complex_name }}</h1>
+
+            <div>
+                <a href="{{ url_for('report.hall_of_fame', complex_name=data.complex_name) }}" class="btn btn-golden-outline">
+                    {# --- ИЗМЕНЕНИЕ 3 --- #}
+                    <i class="bi bi-trophy-fill me-2"></i>{{ _('Зал славы') }}
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex align-items-center">
+        <div class="ms-4 text-center">
+            {# --- ИЗМЕНЕНИЕ 4 --- #}
+            <label class="form-label">{{ _('Валюта') }}</label>
+            <div class="form-check form-switch fs-4"><input class="form-check-input" type="checkbox" role="switch" id="currencyToggle"><label class="form-check-label" for="currencyToggle" id="currencyLabel">UZS</label></div>
+        </div>
+        <a href="{{ url_for('report.plan_fact_report') }}" class="btn btn-outline-secondary ms-4">
+            <i class="bi bi-arrow-left me-2"></i>
+            {# --- ИЗМЕНЕНИЕ 5 --- #}
+            {{ _('Назад к отчету') }}
+        </a>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-6 col-md-6">
+        <div class="kpi-card text-center">
+            {# --- ИЗМЕНЕНИЕ 6 --- #}
+            <div class="kpi-label">{{ _('Всего законтрактовано (за все время)') }}</div>
+            <div class="kpi-value currency-value" data-uzs-value="{{ data.kpi.total_deals_volume }}">{{ "{:,.0f}".format(data.kpi.total_deals_volume) }}</div>
+        </div>
+    </div>
+    <div class="col-lg-6 col-md-6">
+        <div class="kpi-card text-center">
+            {# --- ИЗМЕНЕНИЕ 7 --- #}
+            <div class="kpi-label">{{ _('Всего поступлений (за все время)') }}</div>
+            <div class="kpi-value currency-value" data-uzs-value="{{ data.kpi.total_income }}">{{ "{:,.0f}".format(data.kpi.total_income) }}</div>
+        </div>
+    </div>
+</div>
+
+{# --- ИЗМЕНЕНИЕ 8 --- #}
+<h4 class="mb-3">{{ _('Стоимость остатков (с учетом скидок)') }}</h4>
+<div class="row g-4 mb-4">
+    {% for prop_type, values in data.kpi.remainders_by_type.items() %}
+    <div class="col-lg-3 col-md-6">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">{{ _(prop_type) }}</div>
+            {# --- ИЗМЕНЕНИЕ 9 --- #}
+            <div class="kpi-value currency-value" data-uzs-value="{{ values.total_price }}">{{ "{:,.0f}".format(values.total_price) }}</div>
+            <div class="kpi-sub-value">{{ values.count }} {{ _('шт.') }}</div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        {# --- ИЗМЕНЕНИЕ 10 --- #}
+        <div class="alert alert-secondary">{{ _('Нет свободных остатков для расчета.') }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+<ul class="nav nav-tabs mb-4" id="projectDashboardTab" role="tablist">
+  <li class="nav-item" role="presentation">
+    {# --- ИЗМЕНЕНИЕ 11 (вкладки) --- #}
+    <button class="nav-link active" id="dynamics-tab" data-bs-toggle="tab" data-bs-target="#dynamics-pane" type="button" role="tab">{{ _('Динамика продаж') }}</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="remainders-tab" data-bs-toggle="tab" data-bs-target="#remainders-pane" type="button" role="tab">{{ _('Структура остатков') }}</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="analysis-tab" data-bs-toggle="tab" data-bs-target="#analysis-pane" type="button" role="tab">{{ _('Анализ спроса') }}</button>
+  </li>
+  <li class="nav-item" role="presentation">
+     <button class="nav-link" id="pricing-tab" data-bs-toggle="tab" data-bs-target="#pricing-pane" type="button" role="tab">{{ _('Анализ цен') }}</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="deals-tab" data-bs-toggle="tab" data-bs-target="#deals-pane" type="button" role="tab">{{ _('Последние сделки') }}</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="houses-tab" data-bs-toggle="tab" data-bs-target="#houses-pane" type="button" role="tab">{{ _('По домам') }}</button>
+  </li>
+</ul>
+
+<div class="tab-content" id="projectDashboardTabContent">
+  <div class="tab-pane fade show active" id="dynamics-pane" role="tabpanel">
+    <div class="card card-glass h-100">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                {# --- ИЗМЕНЕНИЕ 12 --- #}
+                <h5 class="card-title mb-0">{{ _('Выполнение плана за текущий год') }}</h5>
+                <div class="prop-type-filter">
+                    {# --- ИЗМЕНЕНИЕ 13 --- #}
+                    <a href="{{ url_for('report.project_dashboard', complex_name=data.complex_name) }}" class="btn btn-sm {{ 'btn-primary' if not selected_prop_type else 'btn-outline-secondary' }}">{{ _('Все типы') }}</a>
+                    {% for pt in property_types %}
+                    <a href="{{ url_for('report.project_dashboard', complex_name=data.complex_name, property_type=pt) }}" class="btn btn-sm {{ 'btn-primary' if selected_prop_type == pt else 'btn-outline-secondary' }}">{{ _(pt) }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="dashboard-chart-container">
+                <canvas id="planFactChart"></canvas>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="remainders-pane" role="tabpanel">
+     <div class="card card-glass h-100">
+        <div class="card-body">
+            {# --- ИЗМЕНЕНИЕ 14 --- #}
+            <h5 class="card-title mb-3">{{ _('Структура непроданных юнитов (шт.)') }}</h5>
+            <div class="dashboard-chart-container" style="height: 350px;">
+                <canvas id="remaindersChart"></canvas>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="analysis-pane" role="tabpanel">
+    <div class="row g-4">
+      <div class="col-lg-4">
+        <div class="card card-glass h-100">
+          <div class="card-body d-flex flex-column">
+            {# --- ИЗМЕНЕНИЕ 15 --- #}
+            <h5 class="card-title mb-3">{{ _('Продажи по этажам') }}</h5>
+            <div class="dashboard-chart-container flex-grow-1">
+              <canvas id="floorChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card card-glass h-100">
+          <div class="card-body d-flex flex-column">
+            {# --- ИЗМЕНЕНИЕ 16 --- #}
+            <h5 class="card-title mb-3">{{ _('Продажи по комнатности') }}</h5>
+            <div class="dashboard-chart-container flex-grow-1">
+              <canvas id="roomsChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card card-glass h-100">
+          <div class="card-body d-flex flex-column">
+            {# --- ИЗМЕНЕНИЕ 17 --- #}
+            <h5 class="card-title mb-3">{{ _('Продажи по площадям') }}</h5>
+            <div class="dashboard-chart-container flex-grow-1">
+              <canvas id="areaChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="pricing-pane" role="tabpanel">
+    <div class="card card-glass h-100">
+        <div class="card-body">
+            {# --- ИЗМЕНЕНИЕ 18 --- #}
+            <h5 class="card-title mb-3">{{ _('Динамика средней цены продажи, UZS/м²') }}</h5>
+            <div class="dashboard-chart-container">
+                <canvas id="priceDynamicsChart"></canvas>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="deals-pane" role="tabpanel">
+     <div class="card card-glass">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table modern-table">
+                    <thead>
+                        <tr>
+                            {# --- ИЗМЕНЕНИЕ 19 (заголовки таблицы) --- #}
+                            <th>{{ _('Дата сделки') }}</th>
+                            <th>{{ _('Тип недвижимости') }}</th>
+                            <th class="text-end">{{ _('Сумма сделки') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for deal in data.recent_deals %}
+                        <tr>
+                            <td>{{ deal.deal_date.strftime('%d.%m.%Y') if deal.deal_date else '-' }}</td>
+                            <td>{{ _(deal.property_type) }}</td>
+                            <td class="text-end currency-value" data-uzs-value="{{ deal.deal_sum }}">{{ "{:,.0f}".format(deal.deal_sum) }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            {# --- ИЗМЕНЕНИЕ 20 --- #}
+                            <td colspan="3" class="text-center text-muted p-4">{{ _('Нет данных о сделках.') }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <div class="tab-pane fade" id="houses-pane" role="tabpanel">
+        <div class="accordion" id="housesAccordion">
+          {% for house in data.houses_data %}
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="heading-{{ loop.index }}">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}">
+                  {{ house.house_name }}
+                </button>
+              </h2>
+              <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#housesAccordion">
+                <div class="accordion-body">
+                  <table class="table house-details-table">
+                    <thead>
+                      <tr>
+                        {# --- ИЗМЕНЕНИЕ 21 (заголовки таблицы) --- #}
+                        <th>{{ _('Тип недвижимости') }}</th>
+                        <th class="text-center">{{ _('Осталось, шт.') }}</th>
+                        <th class="text-center">{{ _('Всего, шт.') }}</th>
+                        <th class="text-end">{{ _('Сред. цена/м² (дно)') }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                    {% for prop_type, details in house.property_types_data.items() %}
+                      <tr>
+                        <td class="fw-bold">{{ _(prop_type) }}</td>
+                        <td class="text-center fs-5 fw-bold">{{ details.remaining_count }}</td>
+                        <td class="text-center text-muted">{{ details.total_count }}</td>
+                        <td class="text-end fs-5 fw-bold currency-value" data-uzs-value="{{ details.avg_price_per_sqm }}">{{ "{:,.0f}".format(details.avg_price_per_sqm) }}</td>
+                      </tr>
+                    {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <div class="col-12">
+                {# --- ИЗМЕНЕНИЕ 22 --- #}
+                <div class="alert alert-secondary text-center">{{ _('Нет данных по отдельным домам в этом комплексе.') }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 12650 }}";
+    const charts_json_data = JSON.parse('{{ charts_json|safe }}');
+    // ИЗМЕНЕНИЕ: Передаём полные, переведённые фразы для графиков
+    window.i18n = {
+        plan_contracting: "{{ _('План контрактации') }}",
+        fact_contracting: "{{ _('Факт контрактации') }}",
+        plan_income: "{{ _('План поступлений') }}",
+        fact_income: "{{ _('Факт поступлений') }}",
+        remaining_qty: "{{ _('Кол-во остатков, шт.') }}",
+        units_sold: "{{ _('Продано квартир, шт.') }}",
+        avg_price: "{{ _('Средняя цена за м²') }}"
+    };
+</script>
+<script src="{{ url_for('static', filename='js/report_script.js') }}"></script>
+<script src="{{ url_for('static', filename='js/project_dashboard_script.js') }}"></script>
+{% endblock %}

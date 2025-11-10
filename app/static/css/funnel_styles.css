@@ -1,0 +1,138 @@
+/* --- СТИЛИ ДЛЯ ВКЛАДОК --- */
+.nav-pills .nav-link {
+    background-color: rgba(var(--bs-body-color-rgb), 0.1);
+    color: var(--bs-body-color);
+}
+.nav-pills .nav-link.active {
+    background-color: var(--gh-gold);
+    color: black;
+    font-weight: bold;
+}
+
+/* --- ОБЩИЕ СТИЛИ ДЛЯ КАРТОЧЕК В МЕТРИКАХ --- */
+.card-glass .list-group-item {
+    background-color: transparent;
+}
+/* Улучшение читаемости текста при наведении в темной теме */
+.card-glass.text-center.h-100:hover {
+    color: var(--bs-body-color);
+}
+
+
+/* --- СТИЛИ ДЛЯ ДЕРЕВА ПУТЕЙ --- */
+.tree-node-wrapper {
+    position: relative;
+    padding-left: 50px;
+}
+.funnel-container > .tree-node-wrapper {
+    padding-left: 0;
+}
+.tree-node {
+    background: rgba(var(--bs-body-color-rgb), .05);
+    border: 1px solid rgba(var(--bs-body-color-rgb), .2);
+    border-radius: 8px;
+    padding: .75rem 1.25rem;
+    margin-top: .5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: background-color 0.2s ease-in-out;
+}
+/* Корневой узел */
+.funnel-container > .tree-node-wrapper > .tree-node {
+    background: var(--gh-gold);
+    color: #000;
+    border-color: var(--gh-gold);
+}
+/* Интерактивность узлов дерева */
+.tree-node.collapsible {
+    cursor: pointer;
+    user-select: none;
+}
+.tree-node.collapsible:hover {
+    background: rgba(var(--bs-body-color-rgb), .1);
+}
+.tree-node.expanded {
+    border-left: 5px solid var(--gh-gold) !important;
+}
+
+/* Контейнер для дочерних элементов и анимация */
+.children-container {
+    max-height: 10000px;
+    overflow: hidden;
+    transition: max-height .5s ease-in-out;
+}
+.children-container.collapsed {
+    max-height: 0;
+}
+
+/* Иконка сворачивания/разворачивания */
+.toggle-icon {
+    display: inline-block;
+    width: 20px;
+    text-align: center;
+    margin-right: 5px;
+    transition: transform .3s;
+}
+.toggle-icon::before {
+    content: '▸'; /* Иконка "вправо" */
+}
+.tree-node.expanded .toggle-icon {
+    transform: rotate(90deg); /* Поворот иконки */
+}
+
+/* Соединительные линии */
+.tree-node-wrapper::before {
+    content: '';
+    position: absolute;
+    left: 25px;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    background-color: rgba(var(--bs-body-color-rgb), .15);
+}
+.tree-node-wrapper:last-child::before {
+    height: 28px;
+}
+.tree-node-wrapper::after {
+    content: '';
+    position: absolute;
+    left: 25px;
+    top: 28px;
+    width: 25px;
+    height: 2px;
+    background-color: rgba(var(--bs-body-color-rgb), .15);
+}
+/* Убираем линии для корневого элемента */
+.funnel-container > .tree-node-wrapper::before,
+.funnel-container > .tree-node-wrapper::after {
+    display: none;
+}
+
+/* Текстовые элементы внутри узла */
+.node-name {
+    font-weight: 700;
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+}
+.node-count {
+    font-size: 1.2rem;
+    font-weight: 700;
+    background: rgba(var(--bs-body-color-rgb), .08);
+    padding: .2rem .6rem;
+    border-radius: 5px;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+.node-count:hover {
+    background: rgba(var(--bs-body-color-rgb), .15);
+    transform: scale(1.05);
+    border-color: var(--gh-gold);
+}
+.node-conversion {
+    font-size: .9rem;
+    opacity: .8;
+}

@@ -1,0 +1,132 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    {# --- ИЗМЕНЕНИЕ 1 --- #}
+    <h1>{{ _('Аналитика по менеджерам') }}</h1>
+</div>
+
+{# --- ВКЛАДКИ --- #}
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        {# --- ИЗМЕНЕНИЕ 2 --- #}
+        <a class="nav-link {% if active_tab == 'general' %}active{% endif %}" href="{{ url_for('manager_analytics.show_report') }}">{{ _('Общий отчет') }}</a>
+    </li>
+    <li class="nav-item">
+        {# --- ИЗМЕНЕНИЕ 3 --- #}
+        <a class="nav-link {% if active_tab == 'yearly' %}active{% endif %}" href="{{ url_for('manager_analytics.yearly_report') }}">{{ _('Годовой отчет по менеджеру') }}</a>
+    </li>
+</ul>
+
+{# --- Содержимое вкладки "Общий отчет" --- #}
+<div class="card card-glass mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('manager_analytics.show_report') }}">
+            <input type="hidden" name="sort_by" value="{{ sort_by }}">
+            <input type="hidden" name="sort_order" value="{{ sort_order }}">
+
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3 col-sm-6">
+                    {# --- ИЗМЕНЕНИЕ 4 --- #}
+                    <label for="month-select" class="form-label">{{ _('Месяц') }}</label>
+                    <select name="month" id="month-select" class="form-select">
+                        {% for m in months %}<option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    {# --- ИЗМЕНЕНИЕ 5 --- #}
+                    <label for="year-select" class="form-label">{{ _('Год') }}</label>
+                    <select name="year" id="year-select" class="form-select">
+                        {% for y in years %}<option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    {# --- ИЗМЕНЕНИЕ 6 --- #}
+                    <label for="post-select" class="form-label">{{ _('Должность') }}</label>
+                    <select name="post-title" id="post-select" class="form-select">
+                        {# --- ИЗМЕНЕНИЕ 7 --- #}
+                        <option value="all" {% if selected_post == 'all' %}selected{% endif %}>{{ _('Все должности') }}</option>
+                        {% for post in all_posts %}<option value="{{ post }}" {% if post == selected_post %}selected{% endif %}>{{ post }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    {# --- ИЗМЕНЕНИЕ 8 --- #}
+                    <button type="submit" class="btn btn-primary w-100">{{ _('Сформировать') }}</button>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="show_non_zero" role="switch" id="showNonZeroSwitch" {% if show_non_zero %}checked{% endif %} onchange="this.form.submit()">
+                        {# --- ИЗМЕНЕНИЕ 9 --- #}
+                        <label class="form-check-label" for="showNonZeroSwitch">{{ _('Показывать только не нулевые значения') }}</label>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-glass">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        {# --- ИЗМЕНЕНИЕ 10: Перевод внутри макроса --- #}
+                        {% macro sort_link(column_key, column_name) %}
+                            {% set next_order = 'asc' if sort_by == column_key and sort_order == 'desc' else 'desc' %}
+                            <a href="{{ url_for('manager_analytics.show_report', month=selected_month, year=selected_year, post_title=selected_post, show_non_zero='on' if show_non_zero else '', sort_by=column_key, sort_order=next_order) }}" class="text-decoration-none text-dark">
+                                {{ _(column_name) }}
+                                {% if sort_by == column_key %}
+                                    {% if sort_order == 'desc' %}▼{% else %}▲{% endif %}
+                                {% endif %}
+                            </a>
+                        {% endmacro %}
+
+                        <th>{{ sort_link('manager_name', 'Менеджер') }}</th>
+                        <th>{{ sort_link('post_title', 'Должность') }}</th>
+                        <th class="text-center">{{ sort_link('bookings', 'Бронь') }}</th>
+                        <th class="text-center">{{ sort_link('deals_in_progress', 'Сделка в работе') }}</th>
+                        <th class="text-center">{{ sort_link('deals_completed', 'Сделка проведена') }}</th>
+                        <th class="text-center">{{ sort_link('deals_failed', 'Отказы / Отмены') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data %}
+                    <tr>
+                        <td>{{ row.manager_name }}</td>
+                        <td>{{ row.post_title }}</td>
+                        <td class="text-center">
+                            {% if row.bookings.count > 0 %}<a href="{{ url_for('manager_analytics.leads_list', ids=row.bookings.buy_ids|join(','), title=_('Брони')+' ('+row.manager_name+')') }}">{{ row.bookings.count }}</a>{% else %}0{% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if row.deals_in_progress.count > 0 %}<a href="{{ url_for('manager_analytics.leads_list', ids=row.deals_in_progress.buy_ids|join(','), title=_('Сделки в работе')+' ('+row.manager_name+')') }}">{{ row.deals_in_progress.count }}</a>{% else %}0{% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if row.deals_completed.count > 0 %}<a href="{{ url_for('manager_analytics.leads_list', ids=row.deals_completed.buy_ids|join(','), title=_('Сделки проведены')+' ('+row.manager_name+')') }}">{{ row.deals_completed.count }}</a>{% else %}0{% endif %}
+                        </td>
+                        <td class="text-center text-danger">
+                            {% if row.deals_failed.count > 0 %}<a href="{{ url_for('manager_analytics.leads_list', ids=row.deals_failed.buy_ids|join(','), title=_('Отказы / Отмены')+' ('+row.manager_name+')') }}">{{ row.deals_failed.count }}</a>{% else %}0{% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    {# --- ИЗМЕНЕНИЕ 11 --- #}
+                    <tr><td colspan="6" class="text-center text-muted">{{ _('Нет данных для отображения по выбранным фильтрам.') }}</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-light fw-bold">
+                        {# --- ИЗМЕНЕНИЕ 12 --- #}
+                        <td colspan="2">{{ _('Итого') }}</td>
+                        <td class="text-center">{% if totals.bookings.count > 0 %}<a href="{{ url_for('manager_analytics.leads_list', ids=totals.bookings.buy_ids|join(','), title=_('Итого: Брони')) }}">{{ totals.bookings.count }}</a>{% else %}0{% endif %}</td>
+                        <td class="text-center">{% if totals.deals_in_progress.count > 0 %}<a href="{{ url_for('manager_analytics.leads_list', ids=totals.deals_in_progress.buy_ids|join(','), title=_('Итого: Сделки в работе')) }}">{{ totals.deals_in_progress.count }}</a>{% else %}0{% endif %}</td>
+                        <td class="text-center">{% if totals.deals_completed.count > 0 %}<a href="{{ url_for('manager_analytics.leads_list', ids=totals.deals_completed.buy_ids|join(','), title=_('Итого: Сделки проведены')) }}">{{ totals.deals_completed.count }}</a>{% else %}0{% endif %}</td>
+                        <td class="text-center">{% if totals.deals_failed.count > 0 %}<a href="{{ url_for('manager_analytics.leads_list', ids=totals.deals_failed.buy_ids|join(','), title=_('Итого: Отказы / Отмены')) }}">{{ totals.deals_failed.count }}</a>{% else %}0{% endif %}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

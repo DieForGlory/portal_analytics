@@ -1,0 +1,40 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<div class="container-fluid">
+    <h3 class="mb-4">{{ title }}</h3>
+    <p>Квартира в ЖК: <strong>{{ offer.complex_name }}</strong></p>
+
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h6 class="m-0 fw-bold text-primary">Данные предложения</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ form.hidden_tag() }}
+                        <div class="form-group mb-3">
+                            {{ form.usp_text.label }}
+                            {{ form.usp_text(class="form-control", rows=4) }}
+                        </div>
+                        <div class="form-group mb-3">
+                            {{ form.extra_discount.label }}
+                            {{ form.extra_discount(class="form-control") }}
+                        </div>
+                         <div class="form-group mb-3">
+                            {{ form.floor_plan_image.label }}
+                            {{ form.floor_plan_image(class="form-control-file") }}
+                        </div>
+                        {{ form.submit(class="btn btn-primary") }}
+                        <a href="{{ url_for('special_offer.manage_specials') }}" class="btn btn-secondary">Отмена</a>
+                    </form>
+                </div>
+                <div class="col-md-4">
+                    <h6>Текущая планировка:</h6>
+                    <img src="{{ offer.image_url }}" class="img-fluid img-thumbnail" alt="Текущая планировка">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,217 @@
+/* :::::: ПЕРЕМЕННЫЕ И ЦВЕТОВАЯ СХЕМА :::::: */
+:root {
+    --gh-gold: #c4a668;
+    --gh-dark-gold: #b39150;
+    --gh-gold-rgb: 196, 166, 104;
+}
+
+[data-bs-theme="light"] {
+    --bs-body-bg: #f8f9fa;
+    --bs-body-color: #212529;
+    --gh-element-bg: #ffffff;
+    --gh-element-bg-rgb: 255, 255, 255;
+    --bs-border-color: #dee2e6;
+    --gh-header-color: #212529;
+    --gh-link-color: #495057;
+    --gh-card-shadow: rgba(0,0,0,0.05);
+}
+
+[data-bs-theme="dark"] {
+    --bs-body-bg: #000000;
+    --bs-body-color: #dee2e6;
+    --gh-element-bg: #212529;
+    --gh-element-bg-rgb: 33, 37, 41;
+    --bs-border-color: #495057;
+    --gh-header-color: #ffffff;
+    --gh-link-color: #adb5bd;
+    --gh-card-shadow: rgba(0,0,0,0.3);
+}
+
+body {
+    font-family: 'Montserrat', sans-serif;
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#particles-js {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.header {
+    background-color: rgba(var(--gh-element-bg-rgb), 0.8);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 2px 10px var(--gh-card-shadow);
+}
+
+.nav-link {
+    font-weight: 500;
+    color: var(--gh-link-color);
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+.nav-link.active, .nav-link:hover {
+    color: var(--gh-gold) !important;
+    transform: translateY(-2px);
+}
+.nav-link:focus {
+    outline: 2px solid rgba(var(--gh-gold-rgb), 0.5);
+    outline-offset: 2px;
+}
+
+.accordion-item {
+    background-color: var(--gh-element-bg);
+    border-color: var(--bs-border-color);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+.accordion-button {
+    color: var(--bs-body-color);
+    background-color: var(--gh-element-bg);
+    transition: color 0.3s ease, background-color 0.3s ease;
+}
+.accordion-button:not(.collapsed) {
+    color: var(--gh-header-color);
+    background-color: rgba(var(--gh-gold-rgb), 0.1);
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,.125);
+}
+.accordion-button:focus {
+    box-shadow: 0 0 0 .25rem rgba(var(--gh-gold-rgb), 0.25);
+    border-color: rgba(var(--gh-gold-rgb), 0.5);
+}
+
+/*
+================================================================
+==     ИСПРАВЛЕННЫЕ СТИЛИ КНОПОК ДЛЯ ПЛАВНОЙ АНИМАЦИИ      ==
+================================================================
+*/
+
+/* 1. ОБЩИЙ СТИЛЬ И АНИМАЦИЯ ДЛЯ ВСЕХ КНОПОК */
+.btn {
+    position: relative;
+    border-width: 2px; /* Фиксированная толщина рамки */
+    border-style: solid;
+    font-weight: 500;
+    transition: border-color 0.5s ease, box-shadow 0.5s ease, color 0.5s ease, background-color 0.5s ease;
+}
+
+/* 2. ОБЩИЙ ЭФФЕКТ ПРИ НАВЕДЕНИИ */
+.btn:hover, .btn:focus {
+    border-color: var(--gh-gold); /* Основная рамка становится золотой */
+    box-shadow: 0 0 0 1px var(--gh-gold), 0 0 20px rgba(var(--gh-gold-rgb), 0.5);
+    outline: none; /* Убираем стандартный outline при фокусе */
+}
+
+/* 3. АДАПТАЦИЯ СТАНДАРТНЫХ КНОПОК BOOTSTRAP */
+
+/* Кнопка с основной заливкой (.btn-primary) */
+.btn-primary {
+    background-color: var(--gh-gold);
+    border-color: var(--gh-gold);
+    color: #fff; /* Белый текст для лучшей читаемости на золотом фоне */
+}
+.btn-primary:hover, .btn-primary:focus {
+    background-color: var(--gh-dark-gold);
+    border-color: var(--gh-dark-gold); /* Рамка тоже темнеет */
+    color: #fff;
+    box-shadow: 0 0 0 1px var(--gh-dark-gold), 0 0 20px rgba(var(--gh-gold-rgb), 0.5);
+}
+
+
+/* Остальные кнопки с заливкой (success, danger и т.д.) */
+.btn-success, .btn-danger, .btn-warning, .btn-info, .btn-dark {
+    border-color: transparent; /* В обычном состоянии рамка незаметна */
+}
+
+/* Контурные кнопки (btn-outline-*) */
+.btn-outline-primary:hover,
+.btn-outline-secondary:hover,
+.btn-outline-success:hover,
+.btn-outline-danger:hover,
+.btn-outline-warning:hover,
+.btn-outline-info:hover {
+    background-color: transparent; /* Сохраняем контурный стиль */
+    color: var(--gh-gold); /* Делаем текст золотым, чтобы он сочетался с рамкой */
+}
+
+/* 4. СТИЛИ ДЛЯ ВАШЕЙ КАСТОМНОЙ КНОПКИ .btn-golden-outline */
+
+/* Начальное состояние */
+.btn-golden-outline {
+    border-color: rgba(var(--gh-gold-rgb), 0.5);
+    color: var(--gh-gold);
+    background-color: transparent;
+}
+
+/* Состояние при наведении */
+.btn-golden-outline:hover {
+    color: var(--gh-dark-gold);
+    background-color: rgba(var(--gh-gold-rgb), 0.1);
+}
+
+
+/*
+================================================================
+==                      КОНЕЦ СТИЛЕЙ КНОПОК                      ==
+================================================================
+*/
+
+
+.form-control, .form-select, .form-control-file {
+    background-color: var(--gh-element-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+    transition: all 0.2s ease-in-out;
+}
+.form-control:focus, .form-select:focus {
+    border-color: var(--gh-gold);
+    box-shadow: 0 0 0 .25rem rgba(var(--gh-gold-rgb), 0.25);
+    background-color: var(--gh-element-bg);
+    color: var(--bs-body-color);
+}
+
+.table {
+    --bs-table-bg: var(--gh-element-bg);
+    --bs-table-color: var(--bs-body-color);
+    --bs-table-border-color: var(--bs-border-color);
+}
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(var(--bs-body-color-rgb), 0.05);
+}
+.table-hover tbody tr:hover {
+    background-color: rgba(var(--gh-gold-rgb), 0.1);
+}
+
+.card {
+    background-color: var(--gh-element-bg);
+    border-color: var(--bs-border-color);
+    box-shadow: 0 4px 15px var(--gh-card-shadow);
+    transition: all 0.3s ease;
+}
+
+.modal-content {
+    background-color: var(--gh-element-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+    box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+}
+.modal-header {
+    border-bottom-color: var(--bs-border-color);
+}
+.modal-footer {
+    border-top-color: var(--bs-border-color);
+}
+
+.badge {
+    font-weight: 600;
+    padding: 0.4em 0.7em;
+}
+.badge.bg-success-subtle { background-color: rgba(var(--bs-success-rgb), 0.15) !important; color: var(--bs-success) !important; border-color: rgba(var(--bs-success-rgb), 0.2) !important; }
+.badge.bg-secondary-subtle { background-color: rgba(var(--bs-secondary-rgb), 0.15) !important; color: var(--bs-secondary) !important; border-color: rgba(var(--bs-secondary-rgb), 0.2) !important; }
+.badge.bg-danger-subtle { background-color: rgba(var(--bs-danger-rgb), 0.15) !important; color: var(--bs-danger) !important; border-color: rgba(var(--bs-danger-rgb), 0.2) !important; }
+.badge.bg-info-subtle { background-color: rgba(var(--bs-info-rgb), 0.15) !important; color: var(--bs-info) !important; border-color: rgba(var(--bs-info-rgb), 0.2) !important; }
+.badge.bg-primary-subtle { background-color: rgba(var(--bs-primary-rgb), 0.15) !important; color: var(--bs-primary) !important; border-color: rgba(var(--bs-primary-rgb), 0.2) !important; }

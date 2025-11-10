@@ -1,0 +1,403 @@
+/* =================================================================
+   ОБЩИЕ СТИЛИ ДЛЯ КАРТОЧЕК И ОТЧЕТОВ
+================================================================= */
+.report-card {
+    background-color: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color-translucent);
+    border-radius: .5rem;
+    margin-bottom: 1.5rem;
+    transition: opacity 0.3s ease-in-out;
+}
+
+.report-card-header {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.report-card-body {
+    padding: 1.25rem;
+}
+
+.summary-card {
+    background-color: var(--bs-secondary-bg);
+}
+
+.nav-tabs .nav-link {
+    color: var(--bs-secondary-color);
+    border: none;
+    border-bottom: 3px solid transparent;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--bs-body-color);
+    background-color: transparent;
+    border-color: var(--bs-primary);
+}
+
+
+/* =================================================================
+   СТИЛИ ДЛЯ KPI-КАРТОЧЕК (Сводка и Дашборд)
+================================================================= */
+.kpi-card {
+    background-color: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color-translucent);
+    border-radius: .75rem;
+    padding: 1.25rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.kpi-label {
+    font-size: 0.9rem;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.5rem;
+}
+
+.kpi-value {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--bs-body-color);
+    line-height: 1.2;
+}
+
+.kpi-sub-value {
+    font-size: 0.9rem;
+    color: var(--bs-secondary-color);
+    margin-bottom: 1rem;
+}
+
+.progress-bar-kpi {
+    width: 100%;
+    background-color: var(--bs-secondary-bg);
+    border-radius: .375rem;
+    overflow: hidden;
+    height: 1.5rem;
+    position: relative;
+    margin-top: auto;
+}
+
+
+/* =================================================================
+   СТИЛИ ДЛЯ СВОДНОЙ ТАБЛИЦЫ ("MODERN TABLE")
+================================================================= */
+.modern-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.modern-table thead th {
+    background-color: var(--bs-tertiary-bg);
+    border-bottom: 2px solid var(--bs-border-color);
+    padding: 1rem;
+    /* text-align: left; был удален */
+    font-weight: 600;
+    font-size: 0.9rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.modern-table thead th[data-sortable] {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+.kpi-card-refund {
+    background: linear-gradient(135deg, #6c757d, #495057); /* Серый градиент */
+    color: #fff;
+}
+
+.kpi-card-refund .kpi-label {
+    color: rgba(255, 255, 255, 0.8);
+}
+.modern-table thead th[data-sortable]:hover {
+    background-color: var(--bs-secondary-bg);
+}
+
+.modern-table tbody tr {
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+    transition: background-color 0.2s ease;
+}
+
+.modern-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.modern-table tbody tr:hover {
+    background-color: var(--bs-tertiary-bg);
+}
+
+.modern-table td {
+    padding: 1rem;
+    vertical-align: middle;
+}
+
+.project-name a, .project-link {
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: inherit;
+    transition: color 0.2s ease;
+}
+
+.project-name a:hover, .project-link:hover {
+    color: var(--bs-primary);
+}
+
+
+/* =================================================================
+   СТИЛИ ДЛЯ ДЕТАЛЬНОЙ ТАБЛИЦЫ ("DETAILS TABLE")
+================================================================= */
+.details-table-container {
+    overflow-x: auto;
+}
+
+.details-table {
+    min-width: 0;
+    font-size: 0.875rem;
+}
+
+.details-table thead th {
+    text-align: center;
+    vertical-align: middle;
+    background-color: var(--bs-tertiary-bg);
+}
+
+.details-table thead abbr {
+    text-decoration: none;
+    border-bottom: 1px dotted;
+    cursor: help;
+}
+
+.details-table th, .details-table td {
+    padding: .6rem .5rem;
+}
+
+.details-table td:first-child, .details-table th:first-child {
+    text-align: left;
+    font-weight: 500;
+}
+
+.details-table .group-header {
+    background-color: var(--bs-secondary-bg);
+}
+
+.details-table .group-divider {
+    border-right: 2px solid var(--bs-border-color);
+}
+
+.details-table tfoot {
+    border-top: 3px solid var(--bs-border-color);
+}
+
+.details-table tfoot tr {
+    background-color: var(--bs-secondary-bg);
+    font-weight: bold;
+}
+
+.details-table tfoot td {
+    vertical-align: middle;
+}
+
+.details-table .percent-bar {
+    display: inline-block;
+    padding: .25em .5em;
+    font-weight: 600;
+    border-radius: .375rem;
+    color: var(--bs-emphasis-color);
+}
+
+.details-table .percent-bar.high-perf { background-color: #1a3652; }
+.details-table .percent-bar.good-perf { background-color: #1c3b2a; }
+.details-table .percent-bar.low-perf { background-color: #422c2f;  }
+.details-table .percent-bar.forecast-perf { background-color: #243f45; }
+
+
+/* =================================================================
+   СТИЛИ ДЛЯ ПРОГРЕСС-БАРОВ
+================================================================= */
+.progress-bar-container,
+.progress-bar-in-table {
+    width: 100%;
+    background-color: var(--bs-secondary-bg);
+    border-radius: .375rem;
+    overflow: hidden;
+    position: relative;
+}
+.progress-bar-container { height: 1.25rem; margin-top: 0.5rem; }
+.progress-bar-in-table { height: 1.75rem; min-width: 120px; }
+
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: .375rem;
+    transition: width 0.5s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.bg-success-custom { background-color: #198754; }
+.bg-warning-custom { background-color: #ffc107; }
+.bg-danger-custom { background-color: #dc3545; }
+
+
+/* =================================================================
+   СТИЛИ ДЛЯ ПЕРЕКЛЮЧАТЕЛЕЙ (FORM CONTROLS)
+================================================================= */
+.form-check.form-switch {
+    display: flex;
+    align-items: center;
+}
+
+.form-switch .form-check-input {
+    width: 3em;           /* Уменьшаем ширину */
+    height: 1.2em;          /* Уменьшаем высоту, сохраняя пропорцию ~2:1 */
+    margin-left: -2.5em;
+    background-color: #343a40;
+    border: 1px solid #495057;
+    border-radius: 2em;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23888'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: left 0.2em center; /* Корректируем позицию кружка */
+    background-size: 1.2em; /* Корректируем размер кружка */
+    transition: background-position 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    cursor: pointer;
+}
+.form-switch .form-check-input:focus { /* <--- И здесь */
+    outline: none;
+    box-shadow: 0 0 0 0.25rem rgba(255, 193, 7, 0.4);
+}
+.form-switch .form-check-input:checked {
+    background-color: #000; /* Черный фон во включенном состоянии */
+    border-color: #ffc107; /* Золотая рамка */
+    background-position: right 0.25em center;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ffc107'/%3e%3c/svg%3e"); /* Золотой кружок */
+    box-shadow: 0 0 10px rgba(255, 193, 7, 0.7); /* Золотое свечение */
+}
+
+.form-check-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 0.25rem rgba(255, 193, 7, 0.4); /* Золотая тень при фокусе */
+}
+
+.form-check-label {
+    margin-left: 0.75em;
+    cursor: pointer;
+}
+
+/* Стили для радиокнопок, чтобы они соответствовали теме */
+.form-check-input[type="radio"] {
+    border-color: #555;
+}
+
+.form-check-input[type="radio"]:checked {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    box-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
+}
+/* =================================================================
+   СТИЛИ ДЛЯ НОВОЙ УПРОЩЕННОЙ СВОДНОЙ ТАБЛИЦЫ
+================================================================= */
+.simplified-summary {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.simplified-summary thead th {
+    background-color: transparent; /* Убираем фон шапки для чистоты */
+    border-bottom: 2px solid var(--bs-border-color);
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.simplified-summary tbody tr {
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.simplified-summary tbody tr:hover {
+    background-color: var(--bs-tertiary-bg);
+}
+
+.simplified-summary td {
+    padding: 1rem;
+    vertical-align: middle;
+}
+
+.project-name-simplified {
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.metric-value {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.metric-value .plan-value {
+    color: var(--bs-secondary-color);
+    font-size: 0.9em;
+}
+
+.expected-income {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.expected-income a {
+    text-decoration: none;
+    color: var(--bs-warning);
+}
+
+.expected-income a:hover {
+    text-decoration: underline;
+}
+
+.progress-bar-container-simplified {
+    width: 100%;
+    max-width: 150px; /* Ограничиваем ширину для лучшего вида */
+    margin: 0 auto;
+    background-color: var(--bs-secondary-bg);
+    border-radius: .375rem;
+    overflow: hidden;
+    height: 1.25rem;
+    position: relative;
+}
+
+.progress-bar-fill-simplified {
+    height: 100%;
+    border-radius: .375rem;
+    transition: width 0.5s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.4);
+}
+
+.simplified-summary tfoot tr {
+    border-top: 2px solid var(--bs-border-color);
+    background-color: var(--bs-tertiary-bg);
+}
+.simplified-summary tfoot .metric-value{
+    font-size: 1.2rem;
+}
+/* Стиль для кликабельных названий проектов в упрощенной таблице */
+.project-link-simplified {
+    text-decoration: none;
+    color: inherit;
+    display: block; /* Растягиваем ссылку на всю ячейку для удобства нажатия */
+    transition: color 0.2s ease-in-out;
+}
+
+.project-link-simplified:hover .project-name-simplified {
+    color: var(--bs-primary); /* Подсвечиваем текст при наведении */
+}

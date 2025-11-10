@@ -1,0 +1,64 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<h1 class="mb-4">{{ _('Настройки сложных калькуляторов') }}</h1>
+
+<div class="card card-glass">
+    <div class="card-body">
+        <form method="POST" enctype="multipart/form-data">
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                {{ form.time_value_rate_annual.label(class="form-label") }}
+                {{ form.time_value_rate_annual(class="form-control") }}
+                {% if form.time_value_rate_annual.errors %}
+                    <div class="text-danger small mt-1">{{ form.time_value_rate_annual.errors[0] }}</div>
+                {% endif %}
+            </div>
+            <hr>
+            <h5 class="mt-4">{{ _('Калькулятор рассрочки') }}</h5>
+            <div class="mb-3">
+                {{ form.standard_installment_min_dp_percent.label(class="form-label") }}
+                {{ form.standard_installment_min_dp_percent(class="form-control") }}
+                 {% if form.standard_installment_min_dp_percent.errors %}
+                    <div class="text-danger small mt-1">{{ form.standard_installment_min_dp_percent.errors[0] }}</div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.standard_installment_whitelist.label(class="form-label") }}
+                {{ form.standard_installment_whitelist(class="form-control", rows=4, placeholder=_("Например: 12345, 67890, 54321")) }}
+            </div>
+            <hr>
+            <h5 class="mt-4">{{ _('Калькулятор рассрочки на ПВ + Ипотека') }}</h5>
+            <div class="mb-3">
+                {{ form.dp_installment_max_term.label(class="form-label") }}
+                {{ form.dp_installment_max_term(class="form-control") }}
+                 {% if form.dp_installment_max_term.errors %}
+                    <div class="text-danger small mt-1">{{ form.dp_installment_max_term.errors[0] }}</div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.dp_installment_whitelist.label(class="form-label") }}
+                {{ form.dp_installment_whitelist(class="form-control", rows=4, placeholder=_("Например: 12345, 67890, 54321")) }}
+            </div>
+            <hr>
+            <h5 class="mt-4">{{ _('Калькулятор "Ипотека под 0%%"') }}</h5>
+            <div class="mb-3">
+                {{ form.zero_mortgage_whitelist.label(class="form-label") }}
+                {{ form.zero_mortgage_whitelist(class="form-control", rows=4, placeholder=_("Например: 12345, 67890, 54321")) }}
+            </div>
+             <div class="mb-3">
+                <a href="{{ url_for('settings.download_zero_mortgage_template') }}" class="btn btn-info btn-sm mb-2">
+                   <i class="bi bi-download me-1"></i> {{ _('Скачать шаблон для матрицы') }}
+               </a>
+               {{ form.excel_file.label(class="form-label") }}
+               {{ form.excel_file(class="form-control") }}
+                {% if form.excel_file.errors %}
+                   <div class="text-danger small mt-1">{{ form.excel_file.errors[0] }}</div>
+               {% endif %}
+           </div>
+
+            {{ form.submit(class="btn btn-golden-outline w-100 mt-3") }}
+        </form>
+    </div>
+</div>
+{% endblock %}

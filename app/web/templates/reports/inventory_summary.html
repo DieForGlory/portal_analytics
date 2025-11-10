@@ -1,0 +1,124 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+    {{ super() }}
+    <style>
+        .kpi-card {
+            background-color: var(--bs-tertiary-bg);
+            border: 1px solid var(--bs-border-color-translucent);
+            border-radius: .75rem;
+            padding: 1rem;
+            height: 100%;
+        }
+        .kpi-label {
+            font-size: 0.9rem;
+            color: var(--bs-secondary-color);
+            margin-bottom: 0.25rem;
+        }
+        .kpi-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--bs-body-color);
+            line-height: 1.2;
+        }
+    </style>
+{% endblock %}
+
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    {# --- ИЗМЕНЕНИЕ 1 --- #}
+    <h1 class="mb-0">{{ _('Сводка по товарному запасу') }}</h1>
+    <div class="d-flex align-items-center gap-3">
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="currencyToggle">
+            <label class="form-check-label" for="currencyToggle" id="currencyLabel">UZS</label>
+        </div>
+        <a id="export-link" data-base-url="{{ url_for('report.export_inventory_summary') }}" href="{{ url_for('report.export_inventory_summary') }}" class="btn btn-outline-success">
+            {# --- ИЗМЕНЕНИЕ 2 --- #}
+            <i class="bi bi-file-earmark-excel me-1"></i>{{ _('Экспорт в Excel') }}
+        </a>
+    </div>
+</div>
+
+{% if overall_summary %}
+<div class="mb-5">
+    {# --- ИЗМЕНЕНИЕ 3 --- #}
+    <h4 class="mb-3">{{ _('Общая сводка по всем проектам') }}</h4>
+    <div class="row g-3">
+        {% for prop_type, metrics in overall_summary|dictsort %}
+        <div class="col-lg-3 col-md-6">
+            <div class="kpi-card">
+                {# --- ИЗМЕНЕНИЕ 4: Перевод типа недвижимости --- #}
+                <div class="kpi-label">{{ _(prop_type) }}</div>
+                <div class="kpi-value">{{ metrics.units }} {{ _('шт.') }} / {{ "%.0f"|format(metrics.total_area) }} м²</div>
+                <hr class="my-2">
+                {# --- ИЗМЕНЕНИЕ 5 --- #}
+                <small class="text-muted">{{ _('Стоимость (дно):') }}</small>
+                <div class="fw-bold currency-value" data-uzs-value="{{ metrics.total_value }}">{{ "{:,.0f}".format(metrics.total_value)|replace(',', '.') }}</div>
+                {# --- ИЗМЕНЕНИЕ 6 --- #}
+                <small class="text-muted">{{ _('Цена за м²:') }}</small>
+                <div class="fw-bold currency-value" data-uzs-value="{{ metrics.avg_price_m2 }}">{{ "{:,.0f}".format(metrics.avg_price_m2)|replace(',', '.') }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% if summary %}
+{# --- ИЗМЕНЕНИЕ 7 --- #}
+<h4 class="mb-3">{{ _('Детализация по проектам') }}</h4>
+<div class="accordion" id="inventoryAccordion">
+    {% for complex_name, complex_data in summary|dictsort %}
+    <div class="accordion-item mb-3">
+        <h2 class="accordion-header" id="heading-{{ loop.index }}">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}">
+                <span class="fs-5 fw-bold">{{ complex_name }}</span>
+            </button>
+        </h2>
+        <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#inventoryAccordion">
+            <div class="accordion-body">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            {# --- ИЗМЕНЕНИЕ 8: Заголовки таблицы --- #}
+                            <th>{{ _('Тип недвижимости') }}</th>
+                            <th class="text-end">{{ _('Остаток, шт.') }}</th>
+                            <th class="text-end">{{ _('Остаток, м²') }}</th>
+                            <th class="text-end">{{ _('Стоимость остатков (дно)') }}</th>
+                            <th class="text-end">{{ _('Цена дна, за м²') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for prop_type, metrics in complex_data|dictsort %}
+                        <tr>
+                            {# --- ИЗМЕНЕНИЕ 9: Перевод типа недвижимости в таблице --- #}
+                            <td class="fw-bold">{{ _(prop_type) }}</td>
+                            <td class="text-end">{{ metrics.units }}</td>
+                            <td class="text-end">{{ "%.2f"|format(metrics.total_area) }}</td>
+                            <td class="text-end currency-value" data-uzs-value="{{ metrics.total_value }}">{{ "{:,.0f}".format(metrics.total_value)|replace(',', '.') }}</td>
+                            <td class="text-end fw-bold text-success currency-value" data-uzs-value="{{ metrics.avg_price_m2 }}">{{ "{:,.0f}".format(metrics.avg_price_m2)|replace(',', '.') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-secondary">
+    {# --- ИЗМЕНЕНИЕ 10 --- #}
+    {{ _('Нет данных для отображения. Возможно, нет активной системы скидок или все объекты проданы.') }}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 13000 }}";
+</script>
+<script src="{{ url_for('static', filename='js/report_script.js') }}"></script>
+{% endblock %}

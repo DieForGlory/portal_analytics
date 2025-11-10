@@ -1,0 +1,194 @@
+{% extends "layouts/base.html" %}
+
+{# === МАКРОС ДЛЯ ДЕРЕВА ПУТЕЙ (без изменений) === #}
+{% macro render_tree_node(node, parent_count) %}
+<div class="tree-node-wrapper">
+    <div class="tree-node {% if node.children %}collapsible{% endif %}">
+        <div class="node-name"><span class="toggle-icon"></span>{{ node.name }}</div>
+        {% if node.count > 0 and node.ids %}
+        <a class="node-count-link" href="{{ url_for('report.funnel_leads', ids=(node.ids | join(',')), name=node.name) }}" target="_blank" title="Показать список заявок">
+            <div class="node-count">{{ node.count }}</div>
+        </a>
+        {% else %}
+             <div class="node-count">{{ node.count }}</div>
+        {% endif %}
+        {% if parent_count and parent_count > 0 %}
+            <div class="node-conversion">CR: <strong>{{ "%.1f"|format(node.count * 100 / parent_count) }}%</strong></div>
+        {% endif %}
+    </div>
+    {% if node.children %}
+        <div class="children-container collapsed">
+            {% for child in node.children %}{{ render_tree_node(child, node.count) }}{% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{# === МАКРОС ДЛЯ МЕТРИК (без изменений) === #}
+{% macro render_metric(value, base, name, is_stuck=False) %}
+    <li class="list-group-item d-flex justify-content-between align-items-center {% if is_stuck %}list-group-item-light{% endif %}">
+        <span>{{ name }}</span>
+        <span class="fw-bold">
+            {{ value }}
+            {% if base > 0 %}<span class="ms-2 badge rounded-pill bg-secondary fw-normal">{{ "%.1f"|format(value * 100 / base) }}%</span>{% endif %}
+        </span>
+    </li>
+{% endmacro %}
+
+
+{% block content %}
+<h1 class="mb-4">Анализ воронки продаж</h1>
+
+{# --- ФИЛЬТР ДАТ (без изменений) --- #}
+<div class="card card-glass mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Фильтр по дате создания заявки</h5>
+        <form method="GET">
+            <input type="hidden" name="view_mode" value="{{ active_view }}">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-5"><label for="start_date" class="form-label">От</label><input type="date" name="start_date" id="start_date" class="form-control" value="{{ filters.start_date }}"></div>
+                <div class="col-md-5"><label for="end_date" class="form-label">До</label><input type="date" name="end_date" id="end_date" class="form-control" value="{{ filters.end_date }}"></div>
+                <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">Применить</button></div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# --- ВКЛАДКИ ДЛЯ ПЕРЕКЛЮЧЕНИЯ ВИДОВ (без изменений) --- #}
+<ul class="nav nav-pills nav-fill mb-4" id="funnel-view-tabs">
+    <li class="nav-item">
+        <a class="nav-link {% if active_view == 'tree' %}active{% endif %}" href="?start_date={{ filters.start_date }}&end_date={{ filters.end_date }}&view_mode=tree">Дерево путей</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_view == 'metrics' %}active{% endif %}" href="?start_date={{ filters.start_date }}&end_date={{ filters.end_date }}&view_mode=metrics">Ключевые метрики</a>
+    </li>
+</ul>
+
+
+{# --- КОНТЕНТ ДЛЯ ВКЛАДОК --- #}
+<div class="tab-content">
+    {# --- ВКЛАДКА 1: ДЕРЕВО ПУТЕЙ (без изменений) --- #}
+    <div class="tab-pane fade {% if active_view == 'tree' %}show active{% endif %}" id="tree-view">
+        <div class="funnel-container">
+            {% if tree_data and tree_data.count > 0 %}
+                {{ render_tree_node(tree_data, None) }}
+            {% else %}
+                <div class="card card-glass"><div class="card-body text-center text-muted p-5">Нет данных для построения дерева.</div></div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# --- ВКЛАДКА 2: КЛЮЧЕВЫЕ МЕТРИКИ (С ИЗМЕНЕНИЯМИ) --- #}
+    <div class="tab-pane fade {% if active_view == 'metrics' %}show active{% endif %}" id="metrics-view">
+        {% set data = metrics_data %}
+        {% if data and data.total_leads > 0 %}
+            <div class="row mb-4">
+                <div class="col-md-3"><div class="card card-glass text-center h-100"><div class="card-body"><h6 class="text-muted">Всего заявок</h6><h2 class="display-5 fw-bold">{{ data.total_leads }}</h2></div></div></div>
+                <div class="col-md-3"><div class="card card-glass text-center h-100"><div class="card-body"><h6 class="text-muted">Целевые</h6><h2 class="display-5 fw-bold text-primary">{{ data.target_leads.count }}</h2><div class="fs-5 text-primary">{{ "%.1f"|format(data.target_leads.count * 100 / data.total_leads) }}%</div></div></div></div>
+                <div class="col-md-3"><div class="card card-glass text-center h-100"><div class="card-body"><h6 class="text-muted">Сделки</h6><h2 class="display-5 fw-bold text-success">{{ data.deals.count }}</h2><div class="fs-5 text-success">{{ "%.1f"|format(data.deals.count * 100 / data.total_leads) }}%</div></div></div></div>
+                <div class="col-md-3"><div class="card card-glass text-center h-100"><div class="card-body"><h6 class="text-muted">Нецелевые</h6><h2 class="display-5 fw-bold text-danger">{{ data.nontarget_leads.count }}</h2><div class="fs-5 text-danger">{{ "%.1f"|format(data.nontarget_leads.count * 100 / data.total_leads) }}%</div></div></div></div>
+            </div>
+            <div class="row g-4">
+                <div class="col-lg-6 col-xl-3">
+                    <div class="card card-glass h-100">
+                        <div class="card-header">Конверсии из "Подбора" ({{ data.metrics.from_podbor.base_count }} з.)</div>
+                        <ul class="list-group list-group-flush">
+                            {{ render_metric(data.metrics.from_podbor.to_vstrecha, data.metrics.from_podbor.base_count, 'в Назначенную встречу') }}
+                            {{ render_metric(data.metrics.from_podbor.to_bron, data.metrics.from_podbor.base_count, 'в Бронь') }}
+                            {{ render_metric(data.metrics.from_podbor.to_otkaz, data.metrics.from_podbor.base_count, 'в Отказ') }}
+                            {{ render_metric(data.metrics.from_podbor.stuck, data.metrics.from_podbor.base_count, 'Остались в статусе', is_stuck=True) }}
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-lg-6 col-xl-3">
+                    <div class="card card-glass h-100">
+                        <div class="card-header">Конверсии из "Назн. встречи" ({{ data.metrics.from_vstrecha.base_count }} з.)</div>
+                        <ul class="list-group list-group-flush">
+                            {{ render_metric(data.metrics.from_vstrecha.to_sostoyalas, data.metrics.from_vstrecha.base_count, 'в Визит состоялся') }}
+                            {{ render_metric(data.metrics.from_vstrecha.to_nesostoyalas, data.metrics.from_vstrecha.base_count, 'в Визит не состоялся') }}
+                            {{ render_metric(data.metrics.from_vstrecha.to_bron, data.metrics.from_vstrecha.base_count, 'в Бронь') }}
+                            {{ render_metric(data.metrics.from_vstrecha.to_otkaz, data.metrics.from_vstrecha.base_count, 'в Отказ') }}
+                            {{ render_metric(data.metrics.from_vstrecha.stuck, data.metrics.from_vstrecha.base_count, 'Остались в статусе', is_stuck=True) }}
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-lg-6 col-xl-3">
+                    <div class="card card-glass h-100">
+                        <div class="card-header">Конверсии из "Визит состоялся" ({{ data.metrics.from_vizit.base_count }} з.)</div>
+                        <ul class="list-group list-group-flush">
+                            {{ render_metric(data.metrics.from_vizit.to_bron, data.metrics.from_vizit.base_count, 'в Бронь') }}
+                             {{ render_metric(data.metrics.from_vizit.to_otkaz, data.metrics.from_vizit.base_count, 'в Отказ') }}
+                            {{ render_metric(data.metrics.from_vizit.stuck, data.metrics.from_vizit.base_count, 'Остались в статусе', is_stuck=True) }}
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-lg-6 col-xl-3">
+                    <div class="card card-glass h-100">
+                        <div class="card-header">Конверсии из "Брони" ({{ data.metrics.from_bron.base_count }} з.)</div>
+                        <ul class="list-group list-group-flush">
+                            {{ render_metric(data.metrics.from_bron.to_sdelka, data.metrics.from_bron.base_count, 'в Сделку') }}
+                            {{ render_metric(data.metrics.from_bron.to_otkaz, data.metrics.from_bron.base_count, 'в Отказ') }}
+                            {{ render_metric(data.metrics.from_bron.stuck, data.metrics.from_bron.base_count, 'Остались в статусе', is_stuck=True) }}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="card card-glass"><div class="card-body text-center text-muted p-5">Нет данных для построения отчета по метрикам.</div></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Стили для дерева путей */
+    .tree-node-wrapper{position:relative;padding-left:50px}.funnel-container>.tree-node-wrapper{padding-left:0}.tree-node{background:rgba(var(--bs-body-color-rgb),.05);border:1px solid rgba(var(--bs-body-color-rgb),.2);border-radius:8px;padding:.75rem 1.25rem;margin-top:.5rem;display:flex;align-items:center;gap:1rem}.funnel-container>.tree-node-wrapper>.tree-node{background:var(--gh-gold);color:#000;border-color:var(--gh-gold)}.tree-node.collapsible{cursor:pointer;user-select:none}.tree-node.collapsible:hover{background:rgba(var(--bs-body-color-rgb),.1)}.children-container{max-height:10000px;overflow:hidden;transition:max-height .5s ease-in-out}.children-container.collapsed{max-height:0}.toggle-icon{display:inline-block;width:20px;text-align:center;margin-right:5px;transition:transform .3s}.toggle-icon::before{content:'▸'}.tree-node.expanded .toggle-icon{transform:rotate(90deg)}.tree-node-wrapper::before{content:'';position:absolute;left:25px;top:0;height:100%;width:2px;background-color:rgba(var(--bs-body-color-rgb),.15)}.tree-node-wrapper:last-child::before{height:28px}.tree-node-wrapper::after{content:'';position:absolute;left:25px;top:28px;width:25px;height:2px;background-color:rgba(var(--bs-body-color-rgb),.15)}.funnel-container>.tree-node-wrapper::before,.funnel-container>.tree-node-wrapper::after{display:none}.node-name{font-weight:700;flex-grow:1;display:flex;align-items:center}.node-count{font-size:1.2rem;font-weight:700;background:rgba(0,0,0,.1);padding:.2rem .6rem;border-radius:5px}.node-conversion{font-size:.9rem;opacity:.8}
+    /* Стили для вкладок */
+    .nav-pills .nav-link { background-color: rgba(var(--bs-body-color-rgb), 0.1); color: var(--bs-body-color); }
+    .nav-pills .nav-link.active { background-color: var(--gh-gold); color: black; font-weight: bold;}
+    /* Стили для ссылок в дереве */
+    .node-count-link { text-decoration: none; color: inherit; }
+    .node-count-link .node-count { transition: background-color 0.2s ease-in-out, transform 0.2s ease; }
+    .node-count-link:hover .node-count { background-color: var(--gh-gold); color: #000; transform: scale(1.1); }
+</style>
+{% endblock %}
+
+
+{% block scripts %}
+{{ super() }}
+<script>
+// JS-логика для раскрытия/скрытия веток в дереве
+document.addEventListener('DOMContentLoaded', function() {
+    const treeView = document.getElementById('tree-view');
+    if (!treeView) return;
+
+    const collapsibles = treeView.querySelectorAll('.collapsible');
+    collapsibles.forEach(function(node) {
+        const isRootChild = node.parentElement.parentElement.classList.contains('funnel-container');
+        if (isRootChild) {
+            node.classList.add('expanded');
+        }
+
+        node.addEventListener('click', function(event) {
+            if (event.target.closest('.node-count-link')) {
+                return;
+            }
+            event.stopPropagation();
+            this.classList.toggle('expanded');
+            const content = this.nextElementSibling;
+            if (content && content.classList.contains('children-container')) {
+                content.classList.toggle('collapsed');
+            }
+        });
+    });
+
+    const rootChildrenContainer = treeView.querySelector('.funnel-container > .tree-node-wrapper > .children-container');
+    if (rootChildrenContainer) {
+        rootChildrenContainer.classList.remove('collapsed');
+    }
+});
+</script>
+{% endblock %}

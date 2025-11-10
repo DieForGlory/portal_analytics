@@ -1,0 +1,261 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ _('Действующая система скидок') }}</h1>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <input type="text" id="searchInput" class="form-control form-control-lg" placeholder="{{ _('🔍 Введите название ЖК для поиска...') }}">
+    </div>
+    <div class="col-md-4 d-flex align-items-center">
+        <div class="form-check form-switch fs-5">
+            <input class="form-check-input" type="checkbox" id="showOnlyCadastreSwitch">
+            <label class="form-check-label text-muted" for="showOnlyCadastreSwitch" style="font-size: 0.9rem;">{{ _('Показывать только с датой кадастра') }}</label>
+        </div>
+    </div>
+</div>
+
+{# Добавляем специфические стили для аккордеонов на странице скидок #}
+<style>
+    /* Стиль для каждого элемента аккордеона на странице скидок */
+    .accordion-item {
+        background: rgba(0, 0, 0, 0.5); /* Полупрозрачный черный фон */
+        backdrop-filter: blur(10px); /* Эффект размытия (глассморфозм) */
+        border: 1px solid transparent; /* Изначально прозрачная рамка */
+        border-image: linear-gradient(45deg, var(--gh-gold), rgba(var(--gh-gold-rgb), 0.3)) 1; /* Золотой градиентный контур */
+        border-radius: 0.75rem; /* Скругленные углы */
+        margin-bottom: 1rem; /* Отступ между элементами */
+        overflow: hidden; /* Важно для border-image и скругления */
+        transition: all 0.3s ease-in-out; /* Плавный переход */
+    }
+
+    .accordion-item:hover {
+        border-image: linear-gradient(45deg, var(--gh-gold), rgba(var(--gh-gold-rgb), 0.7)) 1; /* Более яркий градиент при наведении */
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4); /* Легкая тень */
+        transform: translateY(-2px); /* Небольшой подъем */
+    }
+
+    /* Стиль для кнопки аккордеона (заголовок) */
+    .accordion-button {
+        background-color: rgba(0, 0, 0, 0.4); /* Чуть более темный полупрозрачный фон */
+        color: var(--bs-body-color); /* Цвет текста из темы (для светлой/темной) */
+        font-weight: 500;
+        padding: 1rem 1.25rem; /* Внутренние отступы */
+        border-bottom: 1px solid rgba(var(--bs-body-color-rgb), 0.1); /* Тонкая разделительная линия */
+        transition: all 0.3s ease-in-out;
+    }
+
+    .accordion-button:not(.collapsed) {
+        background-color: rgba(var(--gh-gold-rgb), 0.15); /* Золотой фон при открытии */
+        color: var(--gh-gold); /* Золотой текст при открытии */
+        box-shadow: none; /* Убираем стандартную тень */
+        border-bottom-color: rgba(var(--gh-gold-rgb), 0.4); /* Золотая разделительная линия */
+    }
+
+    .accordion-button::after {
+        filter: invert(var(--bs-accordion-btn-icon-invert)); /* Адаптируем цвет иконки под тему */
+        color: var(--bs-body-color); /* Убедимся, что иконка видна */
+    }
+
+    /* Стили для тела аккордеона */
+    .accordion-body {
+        background-color: rgba(0, 0, 0, 0.3); /* Немного светлее, чем заголовок */
+        color: var(--bs-body-color);
+        padding: 1rem 1.25rem;
+    }
+
+    /* Стили для таблиц внутри аккордеона */
+    .accordion-body table {
+        --bs-table-bg: transparent; /* Прозрачный фон таблицы */
+        --bs-table-color: var(--bs-body-color);
+        --bs-table-border-color: rgba(var(--bs-body-color-rgb), 0.1); /* Тонкие рамки */
+    }
+    .accordion-body .table-light thead {
+        background-color: rgba(var(--gh-gold-rgb), 0.1); /* Легкий золотой фон для заголовков таблицы */
+        color: var(--gh-gold);
+    }
+</style>
+
+{% if structured_discounts %}
+    <div class="accordion" id="discountsAccordion">
+        {% for complex_name, data in structured_discounts.items() %}
+            {% if data.summary.sum_100_payment > 0 or data.summary.sum_mortgage > 0 %}
+            <div class="accordion-item mb-2"
+                 data-complex-name="{{ complex_name|lower }}"
+                 data-cadastre-date-exists="{{ 'true' if data.summary.months_to_cadastre is not none else 'false' }}">
+                <h2 class="accordion-header" id="heading-{{ loop.index }}">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}" aria-expanded="false" aria-controls="collapse-{{ loop.index }}">
+                        <div class="w-100">
+                            <div class="row align-items-center">
+                                <div class="col-lg-4">
+                                    <strong class="fs-5">{{ complex_name }}</strong>
+                                </div>
+                                <div class="col-lg-8">
+                                    <div class="row align-items-center text-center">
+                                        <div class="col-4">
+                                            {% if current_user.role.name in ['ADMIN', 'MANAGER'] %}
+                                                {% if data.summary.avg_remainder_price_sqm > 0 %}
+                                                    <div class="fw-bold fs-5" style="color: var(--gh-gold);">${{ "{:,.0f}".format(data.summary.avg_remainder_price_sqm) }}</div>
+                                                    <small class="text-muted" style="font-size: 0.7rem;">{{ _('ср. цена дна за м²') }}</small>
+                                                {% else %}
+                                                    {# --- ИЗМЕНЕНИЕ 1: Использование trans для многострочного текста с HTML --- #}
+                                                    <div class="fw-bold fs-6 text-warning" style="height: 35px; display: flex; align-items-center; justify-content: center;">{% trans %}Квартиры<br>распроданы{% endtrans %}</div>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-3">
+                                        {% if data.summary.months_to_cadastre is not none %}
+                                            <div class="fw-bold fs-5" style="color: var(--gh-gold);">{{ data.summary.months_to_cadastre }}</div>
+                                            <small class="text-muted" style="font-size: 0.7rem;">{{ _('мес. до кадастра') }}</small>
+                                        {% endif %}
+                                        </div>
+                                        <div class="col-5">
+                                             <small class="text-muted" style="font-size: 0.8rem;">{{ _('Стандартные скидки') }}</small>
+                                            <div class="d-flex justify-content-center mt-1">
+                                                <div class="px-2">
+                                                    <div class="fw-bold fs-5" style="color: var(--gh-gold);">{{ "%.1f"|format(data.summary.sum_100_payment * 100) }}%</div>
+                                                    {# --- ИЗМЕНЕНИЕ 2: Правильный перевод строки с процентом --- #}
+                                                    <small class="text-muted" style="font-size: 0.7rem;">{{ _('100%% оплата') }}</small>
+                                                </div>
+                                                <div class="px-2">
+                                                    <div class="fw-bold fs-5" style="color: var(--gh-gold);">{{ "%.1f"|format(data.summary.sum_mortgage * 100) }}%</div>
+                                                    <small class="text-muted" style="font-size: 0.7rem;">{{ _('Ипотека') }}</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-2 border-top pt-2">
+                                {# Сначала отображаем все теги #}
+                                {% if data.summary.max_action_discount > 0 %}
+                                    <span class="badge rounded-pill bg-danger-subtle border border-danger-subtle text-danger-emphasis fs-6 me-1">
+                                        <i class="bi bi-star-fill"></i>
+                                        {{ _('Акция') }}: {{ "%.1f"|format(data.summary.max_action_discount * 100) }}%
+                                    </span>
+                                {% endif %}
+                                {% for tag in data.summary.available_tags|sort %}
+                                    {% set tag_class = 'secondary' %}
+                                    {% if tag == 'КД' %}{% set tag_class = 'success' %}{% endif %}
+                                    {% if tag == 'ОПТ' %}{% set tag_class = 'info' %}{% endif %}
+                                    {% if tag == 'Холдинг' %}{% set tag_class = 'primary' %}{% endif %}
+                                    <span class="badge rounded-pill bg-{{tag_class}}-subtle border border-{{tag_class}}-subtle text-{{tag_class}}-emphasis me-1">{{ tag }}</span>
+                                {% endfor %}
+
+                                {# В конце отображаем комментарий, если он есть #}
+                                {% if data.summary.complex_comment %}
+                                <span class="ms-3 fst-italic text-muted" style="font-size: 0.85rem;">
+                                    <i class="bi bi-chat-left-text"></i> {{ data.summary.complex_comment }}
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ loop.index }}">
+                    <div class="accordion-body">
+                        {% for prop_type, discounts in data.details.items() if discounts %}
+                            {# --- ИЗМЕНЕНИЕ 3: Перевод типа недвижимости --- #}
+                            <h5 class="mt-3">{{ _('Тип недвижимости') }}: <span class="badge bg-info-subtle border border-info-subtle text-info-emphasis rounded-pill">{{ _(prop_type) }}</span></h5>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mt-2">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>{{ _('Тип оплаты') }}</th>
+                                            <th>{{ _('Дата кадастра') }}</th>
+                                            <th>{{ _('МПП') }}</th>
+                                            <th>{{ _('РОП') }}</th>
+                                            <th>{{ _('КД') }}</th>
+                                            <th>{{ _('ОПТ') }}</th>
+                                            <th>{{ _('ГД') }}</th>
+                                            <th>{{ _('Холдинг') }}</th>
+                                            <th>{{ _('Акция') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for discount in discounts|sort(attribute='payment_method.value') %}
+                                            {% set payment_method_value = discount.payment_method.value %}
+                                            {% set show_row = false %}
+                                            {% if prop_type == 'Квартира' %}{% set show_row = true %}{% endif %}
+                                            {% if prop_type in ['Коммерческое помещение', 'Кладовое помещение'] and payment_method_value == '100% оплата' %}{% set show_row = true %}{% endif %}
+                                            {% if prop_type == 'Парковка' and payment_method_value in ['100% оплата', 'Ипотека'] %}{% set show_row = true %}{% endif %}
+
+                                            {% if show_row %}
+                                            <tr>
+                                                {# --- ИЗМЕНЕНИЕ 4: Перевод типа оплаты в таблице --- #}
+                                                <td>
+                                                    <strong>
+                                                        {% if payment_method_value == '100% оплата' %}
+                                                            {{ _('100%% оплата') }}
+                                                        {% else %}
+                                                            {{ _(payment_method_value) }}
+                                                        {% endif %}
+                                                    </strong>
+                                                </td>
+                                                <td>{{ discount.cadastre_date.strftime('%d.%m.%Y') if discount.cadastre_date else '—' }}</td>
+                                                <td>{% if discount.mpp > 0 %}{{ "%.1f"|format(discount.mpp * 100) }}%{% else %}—{% endif %}</td>
+                                                <td>{% if discount.rop > 0 %}{{ "%.1f"|format(discount.rop * 100) }}%{% else %}—{% endif %}</td>
+                                                <td>{% if discount.kd > 0 %}{{ "%.1f"|format(discount.kd * 100) }}%{% else %}—{% endif %}</td>
+                                                <td>{% if discount.opt > 0 %}{{ "%.1f"|format(discount.opt * 100) }}%{% else %}—{% endif %}</td>
+                                                <td>{% if discount.gd is not none and discount.gd > 0 %}{{ "%.1f"|format(discount.gd * 100) }}%{% else %}—{% endif %}</td>
+                                                <td>{% if discount.holding > 0 %}{{ "%.1f"|format(discount.holding * 100) }}%{% else %}—{% endif %}</td>
+                                                <td>{% if discount.action > 0 %}{{ "%.1f"|format(discount.action * 100) }}%{% else %}—{% endif %}</td>
+                                            </tr>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-warning">{{ _('В системе пока нет настроенных скидок.') }}</div>
+{% endif %}
+{% endblock %}
+
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('searchInput');
+    const showOnlyCadastreSwitch = document.getElementById('showOnlyCadastreSwitch');
+    const accordionItems = document.querySelectorAll('.accordion-item');
+
+    function applyFilters() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const showCadastreOnly = showOnlyCadastreSwitch.checked;
+
+        accordionItems.forEach(function (item) {
+            const complexName = item.dataset.complexName;
+            const hasCadastreDate = item.dataset.cadastreDateExists === 'true';
+
+            const searchMatch = complexName.includes(searchTerm);
+            const cadastreMatch = !showCadastreOnly || hasCadastreDate;
+
+            if (searchMatch && cadastreMatch) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', applyFilters);
+    }
+    if (showOnlyCadastreSwitch) {
+        showOnlyCadastreSwitch.addEventListener('change', applyFilters);
+    }
+
+    applyFilters();
+});
+</script>
+{% endblock %}

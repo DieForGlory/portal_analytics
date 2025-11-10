@@ -1,0 +1,37 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h3 class="mb-4">{{ title }}</h3>
+    <p class="mb-4">Эксклюзивные предложения, действующие только до конца этого месяца. Успейте забронировать выгоду!</p>
+
+    {% if offers %}
+    <div class="row">
+        {% for offer in offers %}
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card h-100 shadow border-left-primary">
+                <a href="{{ url_for('main.special_offer_detail', sell_id=offer.sell_id) }}" class="text-decoration-none">
+                    <img src="{{ offer.image_url }}" class="card-img-top" alt="Планировка" style="object-fit: cover; height: 250px;">
+                    <div class="card-body d-flex flex-column">
+                        <div>
+                            <h5 class="card-title font-weight-bold text-primary">{{ offer.complex_name }}</h5>
+                            <h6 class="card-subtitle mb-2 text-muted">{{ offer.rooms}}-комн. квартира, {{ offer.area }} м²</h6>
+                            <p class="card-text">{{ offer.usp_text|truncate(100) }}</p>
+                        </div>
+
+                        <div class="mt-auto">
+                            <div class="text-muted small"><s>{{ "{:,.0f}".format(offer.price) }} UZS</s></div>
+                            <div class="h5 fw-bold text-gray-800">{{ "{:,.0f}".format(offer.final_price) }} UZS</div>
+                            <span class="badge bg-danger p-2">Общая выгода: {{ "%.1f"|format(offer.total_discount_percent) }}%</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">На данный момент эксклюзивных предложений нет. Загляните позже!</div>
+    {% endif %}
+</div>
+{% endblock %}

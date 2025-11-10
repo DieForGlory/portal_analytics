@@ -1,0 +1,130 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ _('Управление версиями скидок') }}</h1>
+    <div>
+        {% if current_user.role.name == 'ADMIN' %}
+        <form action="{{ url_for('discount.create_draft_version') }}" method="POST">
+             <button type="submit" class="btn btn-golden-outline w-100">
+                <i class="bi bi-pencil-square"></i> {{ _('Создать черновик') }}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card card-glass">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>{{ _('Номер') }}</th>
+                        <th>{{ _('Название / Комментарий') }}</th>
+                        <th>{{ _('Дата создания') }}</th>
+                        <th>{{ _('Статус') }}</th>
+                        <th class="text-end">{{ _('Действия') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in versions %}
+                    <tr>
+                        <td><strong>{{ v.version_number }}</strong></td>
+                        <td>{{ v.comment or _('Без комментария') }}</td>
+                        <td>{{ v.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>
+                            {% if v.is_active %}
+                                <span class="badge rounded-pill fs-6 bg-success-subtle border border-success-subtle text-success-emphasis">{{ _('Активная') }}</span>
+                            {% elif v.was_ever_activated %}
+                                 <span class="badge rounded-pill fs-6 bg-secondary-subtle border border-secondary-subtle text-secondary-emphasis">{{ _('В архиве') }}</span>
+                            {% else %}
+                                <span class="badge rounded-pill fs-6 bg-warning-subtle border border-warning-subtle text-warning-emphasis">{{ _('Черновик') }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group" role="group">
+                                {% if v.is_active or v.was_ever_activated %}
+                                    {# Просмотр для активных и архивных версий #}
+                                    <a href="{{ url_for('discount.view_version', version_id=v.id) }}" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-eye"></i> {{ _('Просмотреть') }}
+                                    </a>
+                                {% else %}
+                                    {# Действия для черновиков (которые никогда не были активны) #}
+                                    <a href="{{ url_for('discount.edit_version', version_id=v.id) }}" class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-pencil"></i> {{ _('Редактировать') }}
+                                    </a>
+
+                                    <button type="button" class="btn btn-outline-success btn-sm ms-2"
+                                            data-bs-toggle="modal" data-bs-target="#activationModal"
+                                            data-version-id="{{ v.id }}" data-version-comment="{{ v.comment or '' }}">
+                                        {{ _('Активировать') }}
+                                    </button>
+
+                                    <form action="{{ url_for('discount.delete_version', version_id=v.id) }}" method="POST" onsubmit="return confirm('{{ _('Вы уверены, что хотите безвозвратно удалить этот черновик?') }}');" class="ms-2">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="activationModal" tabindex="-1" aria-labelledby="activationModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="activationForm" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="activationModalLabel">{{ _('Активация системы скидок') }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+            <p>{{ _('Вы собираетесь активировать новую систему скидок. После активации будет отправлено email-уведомление.') }}</p>
+            <div class="mb-3">
+              <label for="activationComment" class="form-label"><strong>{{ _('Название / Комментарий для версии (обязательно):') }}</strong></label>
+              <textarea class="form-control" id="activationComment" name="comment" rows="3" required placeholder="{{ _('Например: Скидки на весенний период 2025') }}"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Отмена') }}</button>
+          <button type="submit" class="btn btn-success">{{ _('Активировать и отправить уведомление') }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const activationModal = document.getElementById('activationModal');
+    if (activationModal) {
+        activationModal.addEventListener('show.bs.modal', function (event) {
+            // Кнопка, которая открыла модальное окно
+            const button = event.relatedTarget;
+            // Получаем данные из атрибутов кнопки
+            const versionId = button.getAttribute('data-version-id');
+            const versionComment = button.getAttribute('data-version-comment');
+
+            // Находим форму и текстовое поле в модальном окне
+            const form = activationModal.querySelector('#activationForm');
+            const commentTextarea = activationModal.querySelector('#activationComment');
+
+            // Устанавливаем action для формы, чтобы она отправляла запрос на правильный URL
+            form.action = `/versions/activate/${versionId}`;
+            // Устанавливаем текущий комментарий версии в textarea
+            commentTextarea.value = versionComment;
+        });
+    }
+});
+</script>
+{% endblock %}

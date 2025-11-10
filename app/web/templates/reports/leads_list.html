@@ -1,0 +1,40 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+    <a href="{{ request.referrer or url_for('manager_analytics.show_report') }}" class="btn btn-outline-secondary me-3"><i class="bi bi-arrow-left"></i></a>
+    {# --- ИЗМЕНЕНИЕ 1: Перевод заголовка --- #}
+    <h1>{{ _(title) }}</h1>
+</div>
+
+<div class="card card-glass">
+    <div class="card-body">
+        {% if leads %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        {# --- ИЗМЕНЕНИЕ 2: Перевод заголовков таблицы --- #}
+                        <th>{{ _('ID Заявки') }}</th>
+                        <th>{{ _('Дата создания') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lead in leads %}
+                    <tr>
+                        <td>{{ lead.id }}</td>
+                        <td>{{ lead.date_added }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info" role="alert">
+          {# --- ИЗМЕНЕНИЕ 3: Перевод сообщения об отсутствии данных --- #}
+          {{ _('Список заявок пуст.') }}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">{{ title }}</h1>
+        <div class="card bg-danger text-white shadow">
+            <div class="card-body py-2 px-3">
+                <div class="text-white-50 small">До конца предложения:</div>
+                <div id="countdown-timer" class="h5 mb-0 fw-bold" data-expires="{{ offer.expires_at }}">
+                    Расчет...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-7">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 fw-bold text-primary">Планировка</h6>
+                </div>
+                <div class="card-body text-center">
+                    <img src="{{ offer.image_url }}" class="img-fluid" alt="Планировка квартиры">
+                </div>
+            </div>
+             <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 fw-bold text-primary">Уникальное предложение</h6>
+                </div>
+                <div class="card-body">
+                    <p class="lead">{{ offer.usp_text }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 fw-bold text-primary">Стоимость</h6>
+                </div>
+                <div class="card-body">
+                    <div class="text-muted">Полная цена:</div>
+                    <h4 class="fw-bold"><s>{{ "{:,.0f}".format(offer.price) }} UZS</s></h4>
+
+                    <div class="text-muted">Цена для расчета (за вычетом брони):</div>
+                    <h5 class="fw-bold">{{ "{:,.0f}".format(offer.price - offer.reservation_fee) }} UZS</h5>
+
+                    <div class="text-info">Обычные скидки:</div>
+                    <h5 class="fw-bold">{{ "%.1f"|format(offer.standard_discount_percent) }}%</h5>
+
+                    <div class="text-danger">Доп. скидка месяца:</div>
+                    <h5 class="fw-bold text-danger">{{ "%.1f"|format(offer.extra_discount) }}%</h5>
+
+                    <hr>
+
+                    <div class="text-success">Итоговая цена по акции:</div>
+                    <h2 class="fw-bolder text-success">{{ "{:,.0f}".format(offer.final_price) }} UZS</h2>
+                    <span class="badge bg-success p-2">Общая выгода: {{ "%.1f"|format(offer.total_discount_percent) }}%</span>
+                </div>
+            </div>
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 fw-bold text-primary">Основные характеристики</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-bordered">
+                        <tbody>
+                            <tr>
+                                <th>Проект</th>
+                                <td>{{ offer.complex_name }}</td>
+                            </tr>
+                            <tr>
+                                <th>Дом</th>
+                                <td>{{ offer.house_name }}</td>
+                            </tr>
+                            <tr>
+                                <th>Комнат</th>
+                                <td>{{ offer.rooms }}</td>
+                            </tr>
+                            <tr>
+                                <th>Этаж</th>
+                                <td>{{ offer.floor }}</td>
+                            </tr>
+                             <tr>
+                                <th>Площадь</th>
+                                <td>{{ offer.area }} м²</td>
+                            </tr>
+                            <tr>
+                                <th>Статус</th>
+                                <td>{{ card_data.apartment.estate_sell_status_name }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const countdownElement = document.getElementById('countdown-timer');
+    if (countdownElement) {
+        const targetDate = new Date(countdownElement.dataset.expires + 'T23:59:59');
+
+        const interval = setInterval(() => {
+            const now = new Date().getTime();
+            const distance = targetDate - now;
+
+            if (distance < 0) {
+                clearInterval(interval);
+                countdownElement.innerHTML = "Предложение истекло";
+                return;
+            }
+
+            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            countdownElement.innerHTML = `${days}д : ${hours}ч : ${minutes}м : ${seconds}с`;
+        }, 1000);
+    }
+});
+</script>
+{% endblock %}

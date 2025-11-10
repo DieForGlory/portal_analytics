@@ -1,0 +1,101 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">{{ _(title) }}</h1>
+</div>
+
+<div class="card card-glass mb-4">
+    <div class="card-header">
+        <h5><i class="bi bi-funnel-fill me-2"></i>{{ _('Исключения из подбора (по ID квартиры)') }}</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">{{ _('Квартиры из этого списка не будут отображаться в результатах поиска по бюджету.') }}</p>
+
+        <form method="POST" action="{{ url_for('main.manage_exclusions') }}">
+            <input type="hidden" name="action" value="add">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label for="sell_id_to_manage" class="form-label">{{ _('ID Квартиры') }}</label>
+                    <input type="number" class="form-control" id="sell_id_to_manage" name="sell_id_to_manage" required placeholder="{{ _('Введите ID объекта') }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="comment" class="form-label">{{ _('Комментарий (необязательно)') }}</label>
+                    <input type="text" class="form-control" id="comment" name="comment" placeholder="{{ _('Например: В резерве, Снята с продажи') }}">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-plus-circle"></i> {{ _('Добавить') }}
+                    </button>
+                </div>
+            </div>
+        </form>
+        <hr>
+        <h6>{{ _('Список исключенных квартир') }}</h6>
+
+        {% if excluded_sells %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>{{ _('ID Квартиры') }}</th>
+                        <th>{{ _('Комментарий') }}</th>
+                        <th>{{ _('Дата добавления') }}</th>
+                        <th class="text-end">{{ _('Действия') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for excluded_sell in excluded_sells %}
+                    <tr>
+                        <td>{{ excluded_sell.sell_id }}</td>
+                        <td>{{ excluded_sell.comment or '—' }}</td>
+                        <td>{{ excluded_sell.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td class="text-end">
+                            <form method="POST" action="{{ url_for('main.manage_exclusions') }}" onsubmit="return confirm('{{ _('Вы уверены, что хотите удалить исключение для ID %(sell_id)s?', sell_id=excluded_sell.sell_id) }}');">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="sell_id_to_manage" value="{{ excluded_sell.sell_id }}">
+                                <button type="submit" class="btn btn-danger btn-sm">
+                                    <i class="bi bi-trash"></i> {{ _('Удалить') }}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-secondary">
+            {{ _('Список исключенных квартир пуст.') }}
+        </div>
+        {% endif %}
+        </div>
+</div>
+
+<div class="card card-glass">
+    <div class="card-header">
+        <h5><i class="bi bi-journal-text me-2"></i>{{ _('Исключения из отчета по остаткам (по ЖК)') }}</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">{{ _('Нажмите на название проекта, чтобы скрыть его из "Сводки по товарному запасу" или вернуть обратно.') }}</p>
+        <div class="list-group">
+            {% for complex in all_complexes %}
+                <form action="{{ url_for('main.manage_exclusions') }}" method="POST" class="d-grid">
+                    <input type="hidden" name="complex_name_to_toggle" value="{{ complex }}">
+                    {% if complex in excluded_complex_names %}
+                        <button type="submit" class="list-group-item list-group-item-action list-group-item-light text-decoration-line-through d-flex justify-content-between align-items-center">
+                            {{ complex }}
+                            <span class="badge bg-danger rounded-pill"><i class="bi bi-eye-slash-fill me-1"></i> {{ _('Скрыт в отчете') }}</span>
+                        </button>
+                    {% else %}
+                        <button type="submit" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            {{ complex }}
+                            <span class="badge bg-success rounded-pill"><i class="bi bi-eye-fill me-1"></i> {{ _('Виден в отчете') }}</span>
+                        </button>
+                    {% endif %}
+                </form>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

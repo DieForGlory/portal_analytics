@@ -1,0 +1,288 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<style>
+    /* Стили для более наглядного отображения информации */
+    .info-card {
+        background-color: rgba(var(--gh-element-bg-rgb), 0.7);
+        backdrop-filter: blur(5px);
+    }
+    /* Дополнительный стиль для невалидного поля скидки */
+    .discount-input.is-invalid, .discount-input-dp.is-invalid, .discount-input-zero-mortgage.is-invalid {
+        border-color: var(--bs-danger);
+        box-shadow: 0 0 0 .25rem rgba(var(--bs-danger-rgb), 0.25);
+    }
+    input[type="date"]::before {
+        content: attr(placeholder);
+        position: absolute;
+        color: #6c757d; /* Цвет плейсхолдера */
+    }
+    input[type="date"]:focus::before,
+    input[type="date"]:valid::before {
+        display: none;
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">{{ _('Сложные расчёты по объекту ID:') }} {{ data.apartment.id }}</h1>
+    <a href="{{ url_for('main.apartment_details', sell_id=data.apartment.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-2"></i>
+        {{ _('Назад к карточке') }}
+    </a>
+</div>
+
+<div class="card card-glass info-card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4">
+                <strong>{{ _('ЖК') }}:</strong> {{ data.apartment.house.complex_name }}
+            </div>
+            <div class="col-md-4">
+                <strong>{{ _('Дом') }}:</strong> {{ data.apartment.house.geo_house }}
+            </div>
+            <div class="col-md-4">
+                <strong>{{ _('Тип') }}:</strong> {{ _(data.apartment.estate_sell_category) }} ({{ data.apartment.estate_rooms }} {{ _('комн.') }})
+            </div>
+            <div class="col-md-4">
+                <strong>{{ _('Площадь') }}:</strong> {{ data.apartment.estate_area }} м²
+            </div>
+            <div class="col-md-4">
+                <strong>{{ _('Прайс') }}:</strong> <span class="fw-bold">{{ "{:,.0f}".format(data.apartment.estate_price) }} UZS</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-pills nav-fill mb-3" id="pills-tab" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="pills-installment-tab" data-bs-toggle="pill" data-bs-target="#pills-installment" type="button" role="tab" aria-controls="pills-installment" aria-selected="true">
+            {{ _('Калькулятор рассрочки') }}
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="pills-dp-installment-tab" data-bs-toggle="pill" data-bs-target="#pills-dp-installment" type="button" role="tab" aria-controls="pills-dp-installment" aria-selected="false">
+            {{ _('Рассрочка на ПВ (Ипотека)') }}
+        </button>
+    </li>
+     <li class="nav-item" role="presentation">
+        <button class="nav-link" id="pills-zero-mortgage-tab" data-bs-toggle="pill" data-bs-target="#pills-zero-mortgage" type="button" role="tab" aria-controls="pills-zero-mortgage" aria-selected="false">
+            {{ _('Ипотека под 0%%') }}
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="pills-tabContent">
+    <div class="tab-pane fade show active" id="pills-installment" role="tabpanel" aria-labelledby="pills-installment-tab">
+        <div class="card card-glass">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-5">
+                        <h5 class="card-title">{{ _('Параметры расчёта') }}</h5>
+                        <form id="installment-form" data-action="{{ url_for('complex_calc.calculate_installment') }}">
+                            <div class="mb-3">
+                                <label for="term" class="form-label">{{ _('Срок рассрочки (мес)') }}</label>
+                                <input type="number" class="form-control" id="term" name="term" required min="1">
+                            </div>
+                            <label for="dp-amount-standard" class="form-label">{{ _('Первоначальный взнос') }}</label>
+                            <div class="input-group mb-3">
+                                <input type="number" class="form-control" id="dp-amount-standard" placeholder="{{ _('Введите сумму или %%') }}" required>
+                                <select class="form-select" id="dp-type-standard" style="max-width: 80px;">
+                                    <option value="uzs">UZS</option>
+                                    <option value="usd">USD</option>
+                                    <option value="percent">%</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="first_payment_date" class="form-label">{{ _('Первая дата платежа') }}</label>
+                                <input type="date" class="form-control" id="first_payment_date" name="first_payment_date" placeholder="{{ _('ГГГГ-ММ-ДД') }}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">{{ _('Скидки (%%)') }}:</label>
+                                {% set discounts100 = data.all_discounts_for_property_type|selectattr('payment_method', 'eq', '100% оплата')|first %}
+                                {% if discounts100 %}
+                                    {% for key, name in [('mpp', 'МПП'), ('rop', 'РОП'), ('kd', 'КД'), ('opt', 'ОПТ'), ('holding', 'Холдинг'), ('action', 'Акция')] %}
+                                        {% if discounts100[key] > 0 %}
+                                        <div class="input-group input-group-sm mb-2">
+                                            <span class="input-group-text" style="width: 80px;">{{ _(name) }}</span>
+                                            <input type="number" class="form-control discount-input" id="disc-{{key}}" placeholder="{{ _('макс.') }} {{ (discounts100[key]*100)|round(1) }}%" min="0" max="{{ (discounts100[key]*100) }}" step="0.1" data-max-val="{{ discounts100[key] }}">
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            <button type="submit" class="btn btn-golden-outline w-100">{{ _('Рассчитать') }}</button>
+                        </form>
+                    </div>
+                    <div class="col-md-7">
+                        <h5 class="card-title">{{ _('Результаты') }}</h5>
+                        <div id="result-display" class="p-3 bg-body-secondary rounded" style="min-height: 250px;">
+                             <div id="error-display" class="alert alert-danger d-none"></div>
+                            <table class="table table-sm table-borderless mb-0">
+                                <tbody>
+                                    <tr><td>{{ _('Стоимость по прайсу') }}:</td><td class="text-end fw-bold fs-5" id="res-price-list">...</td></tr>
+                                    <tr><td>{{ _('Расчётная скидка') }}:</td><td class="text-end fw-bold fs-5 text-danger" id="res-discount">...</td></tr>
+                                    <tr><td>{{ _('Расчётная стоимость договора') }}:</td><td class="text-end fw-bold fs-5 text-success" id="res-contract-value">...</td></tr>
+                                    <tr class="border-top mt-2"><td class="pt-3">{{ _('Ежемесячный платёж') }}:</td><td class="pt-3 text-end fw-bold fs-5" id="res-monthly-payment">...</td></tr>
+                                </tbody>
+                            </table>
+                            <button id="print-kp-installment" class="btn btn-primary mt-3 d-none w-100">
+                                <i class="bi bi-printer me-1"></i> {{ _('Распечатать КП по рассрочке') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="tab-pane fade" id="pills-dp-installment" role="tabpanel" aria-labelledby="pills-dp-installment-tab">
+        <div class="card card-glass">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-5">
+                        <h5 class="card-title">{{ _('Рассрочка на ПВ (до 6 мес)') }}</h5>
+                        <form id="dp-installment-form" data-action="{{ url_for('complex_calc.calculate_dp_installment') }}">
+                            <div class="mb-3">
+                                <label class="form-label">{{ _('Тип ипотеки') }}</label>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" name="mortgage_type" id="mortgage-standard" value="standard" checked>
+                                    <label class="btn btn-outline-primary" for="mortgage-standard">{{ _('Стандартная (до 420 млн)') }}</label>
+
+                                    <input type="radio" class="btn-check" name="mortgage_type" id="mortgage-extended" value="extended">
+                                    <label class="btn btn-outline-primary" for="mortgage-extended">{{ _('Расширенная (до 840 млн)') }}</label>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="dp-term" class="form-label">{{ _('Срок рассрочки на ПВ (1-6 мес)') }}</label>
+                                <input type="number" class="form-control" id="dp-term" name="dp-term" required min="1" max="6" value="6">
+                            </div>
+                            <div class="mb-3">
+                                <label for="dp_first_payment_date" class="form-label">{{ _('Первая дата платежа по ПВ') }}</label>
+                                <input type="date" class="form-control" id="dp_first_payment_date" name="dp_first_payment_date" placeholder="{{ _('ГГГГ-ММ-ДД') }}">
+                            </div>
+                            <label for="dp-amount" class="form-label">{{ _('Первоначальный взнос') }}</label>
+                            <div class="input-group mb-3">
+                                <input type="number" class="form-control" id="dp-amount" placeholder="{{ _('Введите сумму или %%') }}" required>
+                                <select class="form-select" id="dp-type" style="max-width: 80px;">
+                                    <option value="uzs">UZS</option>
+                                    <option value="usd">USD</option>
+                                    <option value="percent">%</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">{{ _('Скидки (%%)') }}:</label>
+                                {% set discountsIpoteka = data.all_discounts_for_property_type|selectattr('payment_method', 'eq', 'Ипотека')|first %}
+                                {% if discountsIpoteka %}
+                                    {% for key, name in [('mpp', 'МПП'), ('rop', 'РОП'), ('kd', 'КД'), ('opt', 'ОПТ'), ('holding', 'Холдинг'), ('action', 'Акция')] %}
+                                        {% if discountsIpoteka[key] > 0 %}
+                                        <div class="input-group input-group-sm mb-2">
+                                            <span class="input-group-text" style="width: 80px;">{{ _(name) }}</span>
+                                            <input type="number" class="form-control discount-input-dp" id="dp-disc-{{key}}" placeholder="{{ _('макс.') }} {{ (discountsIpoteka[key]*100)|round(1) }}%" min="0" max="{{ (discountsIpoteka[key]*100) }}" step="0.1" data-max-val="{{ discountsIpoteka[key] }}">
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            <button type="submit" class="btn btn-warning w-100">{{ _('Рассчитать') }}</button>
+                        </form>
+                    </div>
+                    <div class="col-md-7">
+                        <h5 class="card-title">{{ _('Результаты') }}</h5>
+                        <div id="dp-result-display" class="p-3 bg-body-secondary rounded">
+                             <div id="dp-error-display" class="alert alert-danger d-none"></div>
+                            <table class="table table-sm table-borderless mb-0">
+                                <tbody>
+                                    <tr><td>{{ _('Срок рассрочки на ПВ') }}:</td><td class="text-end fw-bold fs-5" id="dp-res-term">...</td></tr>
+                                    <tr><td>{{ _('Ежемесячный платёж по ПВ') }}:</td><td class="text-end fw-bold fs-5" id="dp-res-monthly">...</td></tr>
+                                    <tr class="text-primary"><td>{{ _('Тело ипотеки') }}:</td><td class="text-end fw-bold fs-5" id="dp-res-mortgage">...</td></tr>
+                                    <tr class="border-top mt-2"><td class="pt-3">{{ _('Итоговая стоимость договора') }}:</td><td class="pt-3 text-end fw-bold fs-5 text-success" id="dp-res-contract">...</td></tr>
+                                </tbody>
+                            </table>
+                             <button id="print-kp-dp-installment" class="btn btn-primary mt-3 d-none w-100">
+                                <i class="bi bi-printer me-1"></i> {{ _('Распечатать КП по рассрочке на ПВ') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="tab-pane fade" id="pills-zero-mortgage" role="tabpanel" aria-labelledby="pills-zero-mortgage-tab">
+    <div class="card card-glass">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-5">
+                    <h5 class="card-title">{{ _('Параметры ипотеки под 0%%') }}</h5>
+                    <form id="zero-mortgage-form" data-action="{{ url_for('complex_calc.calculate_zero_mortgage') }}">
+                        <div class="mb-3">
+                            <label class="form-label">{{ _('Тип ипотеки') }}</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="zero_mortgage_type" id="zero-mortgage-standard" value="standard" checked>
+                                <label class="btn btn-outline-info" for="zero-mortgage-standard">{{ _('Стандартная (до 420 млн)') }}</label>
+
+                                <input type="radio" class="btn-check" name="zero_mortgage_type" id="zero-mortgage-extended" value="extended">
+                                <label class="btn btn-outline-info" for="zero-mortgage-extended">{{ _('Расширенная (до 840 млн)') }}</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="zero-mortgage-term" class="form-label">{{ _('Срок рассрочки (мес)') }}</label>
+                            <select class="form-select" id="zero-mortgage-term" name="term">
+                                {% for i in range(18, 66, 6) %}
+                                <option value="{{ i }}">{{ i }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="zero-mortgage-dp" class="form-label">{{ _('Первоначальный взнос (%%)') }}</label>
+                             <select class="form-select" id="zero-mortgage-dp" name="dp_percent">
+                                {% for i in range(30, 70, 10) %}
+                                <option value="{{ i }}">{{ i }}%</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                         <div class="mb-3">
+                                <label class="form-label">{{ _('Скидки (%%)') }}:</label>
+                                {% set discounts100 = data.all_discounts_for_property_type|selectattr('payment_method', 'eq', '100% оплата')|first %}
+                                {% if discounts100 %}
+                                    {% for key, name in [('mpp', 'МПП'), ('rop', 'РОП'), ('kd', 'КД'), ('opt', 'ОПТ'), ('holding', 'Холдинг'), ('action', 'Акция')] %}
+                                        {% if discounts100[key] > 0 %}
+                                        <div class="input-group input-group-sm mb-2">
+                                            <span class="input-group-text" style="width: 80px;">{{ _(name) }}</span>
+                                            <input type="number" class="form-control discount-input-zero-mortgage" id="zero-mortgage-disc-{{key}}" placeholder="{{ _('макс.') }} {{ (discounts100[key]*100)|round(1) }}%" min="0" max="{{ (discounts100[key]*100) }}" step="0.1" data-max-val="{{ discounts100[key] }}">
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                        <button type="submit" class="btn btn-info w-100">{{ _('Рассчитать') }}</button>
+                    </form>
+                </div>
+                <div class="col-md-7">
+                    <h5 class="card-title">{{ _('Результаты') }}</h5>
+                    <div id="zero-mortgage-result-display" class="p-3 bg-body-secondary rounded">
+                        <div id="zero-mortgage-error-display" class="alert alert-danger d-none"></div>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tbody>
+                                <tr><td>{{ _('Сумма по договору') }}:</td><td class="text-end fw-bold fs-5" id="zero-mortgage-res-contract">...</td></tr>
+                                <tr><td>{{ _('Первоначальный взнос') }}:</td><td class="text-end fw-bold fs-5" id="zero-mortgage-res-dp">...</td></tr>
+                                <tr class="border-top mt-2"><td class="pt-3">{{ _('Ежемесячный платёж') }}:</td><td class="pt-3 text-end fw-bold fs-5" id="zero-mortgage-res-monthly">...</td></tr>
+                            </tbody>
+                        </table>
+                        <button id="print-kp-zero-mortgage" class="btn btn-primary mt-3 d-none w-100">
+                            <i class="bi bi-printer me-1"></i> {{ _('Распечатать КП по Ипотеке 0%%') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/complex_calc_logic.js') }}" defer></script>
+{% endblock %}

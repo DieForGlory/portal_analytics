@@ -1,0 +1,32 @@
+{% extends "layouts/base.html" %}
+{% from "layouts/_form_helpers.html" import render_field %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card card-glass p-4 mt-4">
+            <h2 class="text-center mb-4" style="color: var(--gh-gold);">{{ _('Загрузка планов менеджеров') }}</h2>
+
+            <div class="text-center mb-4">
+                <a href="{{ url_for('report.download_manager_plan_template') }}" class="btn btn-info">
+                    <i class="bi bi-download me-1"></i> {{ _('Скачать шаблон для заполнения') }}
+                </a>
+            </div>
+            <p class="text-muted text-center small">
+                {{ _('Загрузите Excel-файл. Первый столбец: ФИО менеджера. Остальные столбцы: "Контрактация ДД.ММ.ГГГГ" и "Поступления ДД.ММ.ГГГГ".') }}
+            </p>
+            <form method="POST" enctype="multipart/form-data">
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    {{ form.excel_file.label(class="form-label") }}
+                    {{ form.excel_file(class="form-control") }}
+                    {% for error in form.excel_file.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {{ form.submit(class="btn btn-golden-outline w-100 mt-3") }}
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

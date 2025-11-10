@@ -1,0 +1,48 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    {# --- ИЗМЕНЕНИЕ 1: Перевод заголовка (переменной) --- #}
+    <h1 class="mb-0">{{ _(title) }}</h1>
+    {# --- ИЗМЕНЕНИЕ 2: Перевод единицы измерения --- #}
+    <span class="badge bg-primary rounded-pill fs-5">{{ leads|length }} {{ _('шт.') }}</span>
+</div>
+
+
+<div class="card card-glass">
+    <div class="card-body">
+        {% if leads %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            {# --- ИЗМЕНЕНИЕ 3: Перевод заголовков таблицы --- #}
+                            <th scope="col" style="width: 30%;">{{ _('ID Заявки') }}</th>
+                            <th scope="col">{{ _('Дата создания') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lead in leads %}
+                        <tr>
+                            <td>{{ lead.id }}</td>
+                            <td>{{ lead.date_added }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center text-muted p-5">
+                {# --- ИЗМЕНЕНИЕ 4: Перевод сообщений об отсутствии данных --- #}
+                <p class="fs-4">{{ _('Заявки не найдены.') }}</p>
+                <p>{{ _('Не удалось получить список ID или по указанным ID нет данных.') }}</p>
+            </div>
+        {% endif %}
+
+        <div class="mt-4 text-center">
+            {# --- ИЗМЕНЕНИЕ 5: Перевод текста кнопки --- #}
+            <a href="javascript:window.close();" class="btn btn-secondary">{{ _('Закрыть окно') }}</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        {# --- ИЗМЕНЕНИЕ 1 --- #}
+        <a href="{{ url_for('report.project_dashboard', complex_name=complex_name) }}" class="text-muted text-decoration-none small mb-1 d-block">
+            <i class="bi bi-arrow-left"></i> {{ _('Назад к аналитике по проекту') }}
+        </a>
+        {# --- ИЗМЕНЕНИЕ 2 --- #}
+        <h1 class="mb-0">{{ _('Зал славы:') }} {{ complex_name }}</h1>
+    </div>
+</div>
+
+<div class="card card-glass mb-4">
+    <div class="card-body">
+        <form method="GET">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    {# --- ИЗМЕНЕНИЕ 3 --- #}
+                    <label for="start_date" class="form-label">{{ _('Дата от') }}</label>
+                    <input type="date" name="start_date" id="start_date" class="form-control" value="{{ filters.start_date }}">
+                </div>
+                <div class="col-md-3">
+                    {# --- ИЗМЕНЕНИЕ 4 --- #}
+                    <label for="end_date" class="form-label">{{ _('Дата до') }}</label>
+                    <input type="date" name="end_date" id="end_date" class="form-control" value="{{ filters.end_date }}">
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check form-switch mb-1">
+                        <input class="form-check-input" type="checkbox" role="switch" id="currency-switcher">
+                        {# --- ИЗМЕНЕНИЕ 5 --- #}
+                        <label class="form-check-label" for="currency-switcher">{{ _('Показать в USD') }}</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    {# --- ИЗМЕНЕНИЕ 6 --- #}
+                    <button type="submit" class="btn btn-primary w-100">{{ _('Применить фильтр') }}</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-glass">
+    <div class="card-header">
+        {# --- ИЗМЕНЕНИЕ 7 --- #}
+        {{ _('Рейтинг менеджеров') }}
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0">
+                <thead>
+                    <tr>
+                        {# --- ИЗМЕНЕНИЕ 8 (заголовки таблицы) --- #}
+                        <th style="width: 5%;">{{ _('Место') }}</th>
+                        <th>{{ _('Менеджер') }}</th>
+                        <th class="text-end">{{ _('Кол-во сделок') }}</th>
+                        <th class="text-end">{{ _('Кв. метры') }}</th>
+                        <th class="text-end">{{ _('Объем продаж,') }} <span id="currency-label">UZS</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for manager in ranking_data %}
+                    <tr>
+                        <td class="text-center fs-5"><strong>{{ loop.index }}</strong></td>
+                        <td>{{ manager.full_name }}</td>
+                        <td class="text-end fs-5 text-success"><strong>{{ manager.deal_count }}</strong></td>
+                        <td class="text-end">{{ "%.2f"|format(manager.total_area or 0) }}</td>
+                        <td class="text-end money-value" data-uzs-value="{{ manager.total_volume }}">{{ "{:,.0f}".format(manager.total_volume) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        {# --- ИЗМЕНЕНИЕ 9 --- #}
+                        <td colspan="5" class="text-center text-muted p-4">{{ _('Нет данных за выбранный период.') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const currencySwitcher = document.getElementById('currency-switcher');
+    const usdRate = {{ usd_to_uzs_rate or 1 }};
+
+    function updateCurrency() {
+        const isUsd = currencySwitcher.checked;
+        const currencyLabel = document.getElementById('currency-label');
+
+        if (currencyLabel) {
+            currencyLabel.textContent = isUsd ? 'USD' : 'UZS';
+        }
+
+        document.querySelectorAll('.money-value').forEach(el => {
+            const uzsValue = parseFloat(el.dataset.uzsValue);
+            if (isNaN(uzsValue)) return;
+
+            let displayValue;
+            if (isUsd) {
+                displayValue = '$ ' + (uzsValue / usdRate).toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+            } else {
+                displayValue = uzsValue.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+            }
+            el.textContent = displayValue;
+        });
+    }
+
+    if (currencySwitcher && usdRate > 1) {
+        currencySwitcher.addEventListener('change', updateCurrency);
+        // Вызываем функцию при загрузке, чтобы установить начальное состояние
+        updateCurrency();
+    }
+});
+</script>
+{% endblock %}

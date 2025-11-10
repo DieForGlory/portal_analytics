@@ -1,0 +1,57 @@
+/* app/static/css/commercial_offer_style.css (Финальная версия с доработкой темы "Ювелир") */
+
+@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;600&family=Montserrat:wght@300;400;500;700&family=Roboto+Mono:wght@400&display=swap');
+
+:root {
+    --font-sans: 'Montserrat', sans-serif;
+    --font-serif: 'Lora', serif;
+    --font-mono: 'Roboto Mono', monospace;
+    --color-gold: #AE956B;
+}
+.calc-details-card .card-title {
+    padding-top: 0.5rem;    /* Добавляем отступ сверху */
+    padding-bottom: 0.5rem; /* Добавляем отступ снизу */
+}
+@page { size: A4; margin: 0; }
+body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page-container { width: 210mm; min-height: 297mm; padding: 12mm; margin: 10mm auto; display: flex; flex-direction: column; box-shadow: 0 0 15px rgba(0,0,0,0.1); transition: all 0.3s ease; }
+.header-logo svg { height: 35px; width: auto; }
+.info-item { display: grid; grid-template-columns: 150px 1fr; align-items: baseline; } /* Меняем на Grid для выравнивания */
+.info-value { text-align: right; }
+.calc-details-card dl { display: grid; grid-template-columns: auto 1fr; align-items: baseline; row-gap: 0.5rem; }
+.calc-details-card dt { grid-column: 1; }
+.calc-details-card dd { grid-column: 2; text-align: right; }
+.footer { text-align: center; margin-top: auto; padding-top: 1rem; font-size: 8pt; border-top: 1px solid; }
+@media print { body { background-color: transparent !important; } .no-print { display: none !important; } .page-container { margin: 0; box-shadow: none; } }
+
+/* ... (Код для тем Статус, Арт-деко, Редакция, Мрамор, Карбон без изменений) ... */
+
+/* ============================================================= */
+/* ----- ТЕМА 5: ЮВЕЛИР (С ИСПРАВЛЕНИЯМИ) ----- */
+/* ============================================================= */
+body.theme-jeweler { font-family: var(--font-serif); background: #F9F6F4; }
+.theme-jeweler .page-container { background: #FFFFFF; border: 1px solid #F0EAE4; }
+.theme-jeweler .header { text-align: center; margin-bottom: 2rem; }
+.theme-jeweler .header h1 { font-weight: 400; font-size: 20pt; }
+.theme-jeweler .section-title { text-align: center; font-weight: 400; border-bottom: 1px solid var(--color-gold); padding-bottom: 0.6rem; letter-spacing: 1px; }
+.theme-jeweler .info-block { padding: 0.5rem 0; }
+.theme-jeweler .info-item { border-bottom: 1px dotted #EAE0D8; }
+.theme-jeweler .info-label { color: #8C7D6E; }
+.theme-jeweler .calc-details-card { border: 1px solid #F0EAE4; background: #FAF8F6; border-radius: 4px; }
+.theme-jeweler .calc-details-card .card-title { text-align: center; font-size: 12pt; color: #4F4032; }
+.theme-jeweler .calc-details-card .text-primary {
+    color: #333333 !important; /* Устанавливаем строгий тёмно-серый цвет */
+}
+.theme-jeweler .payment-schedule-table { border-collapse: collapse; }
+.theme-jeweler .payment-schedule-table thead { border-bottom: 1.5px solid #4F4032; }
+.theme-jeweler .payment-schedule-table th { color: #8C7D6E; text-align: left; padding: 0.5rem; }
+.theme-jeweler .payment-schedule-table th:last-child { text-align: right; }
+.theme-jeweler .payment-schedule-table td { padding: 0.6rem 0.5rem; border-bottom: 1px solid #F0EAE4; }
+.theme-jeweler .payment-schedule-table td:last-child { text-align: right; }
+.theme-jeweler .logo-main { fill: #444; }
+.theme-jeweler .logo-accent { fill: var(--color-gold); }
+.theme-jeweler .footer { border-top-color: #F0EAE4; color: #A49B92; }
+.theme-jeweler .info-label {
+    font-weight: 600;
+    color: #333333; /* Заменяем на строгий тёмно-серый */
+}

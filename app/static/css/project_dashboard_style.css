@@ -1,0 +1,115 @@
+/* --- Стили для карточек KPI --- */
+.kpi-card {
+    background-color: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color-translucent);
+    border-radius: .75rem;
+    padding: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.kpi-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+}
+
+.kpi-value {
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: var(--bs-body-color);
+}
+
+.kpi-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.25rem;
+}
+
+.kpi-sub-value {
+    font-size: 1rem;
+    color: var(--bs-tertiary-color);
+    margin-top: 0.25rem;
+}
+
+
+/* --- Стили для контейнеров графиков --- */
+.dashboard-chart-container {
+    position: relative;
+    height: 400px; /* Базовая высота для больших графиков */
+    width: 100%;
+}
+
+
+/* --- Стили для Аккордеона (Дома) --- */
+.house-card {
+    transition: all 0.2s ease-in-out;
+}
+
+.house-card .card-header h5 {
+    font-weight: 600;
+}
+
+.metric-item-house {
+    padding: 1rem;
+    border-radius: .5rem;
+    background-color: var(--bs-secondary-bg);
+    height: 100%;
+}
+
+.metric-item-house .metric-label {
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+    text-transform: uppercase;
+}
+
+.metric-item-house .metric-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    display: block;
+}
+.accordion-item {
+    background-color: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    margin-bottom: 1rem;
+    border-radius: .75rem !important;
+}
+
+.accordion-button {
+    background-color: transparent !important;
+    color: var(--bs-body-color) !important;
+    font-weight: 600;
+    font-size: 1.1rem;
+    border-radius: .75rem;
+    box-shadow: none !important; /* Убираем тень при фокусе */
+}
+
+.accordion-button:not(.collapsed) {
+    border-bottom: 1px solid var(--bs-border-color);
+}
+
+.accordion-button::after {
+    /* Используем иконку Bootstrap для стрелки */
+    background-image: var(--bs-accordion-btn-active-icon);
+}
+
+.accordion-body {
+    padding: 0;
+}
+
+.house-details-table {
+    margin-bottom: 0;
+}
+
+.house-details-table th {
+    color: var(--bs-secondary-color);
+    font-weight: 500;
+    border-top: none;
+}
+
+.house-details-table td {
+    vertical-align: middle;
+}
