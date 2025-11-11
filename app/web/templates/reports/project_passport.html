@@ -178,7 +178,13 @@
                                 {% for d in data.dynamic_data.active_discounts %}
                                 <tr>
                                     <td>{{ _(d.property_type) }}</td>
-                                    <td>{{ _(d.payment_method) }}</td>
+                                    <td>
+                                        {% if d.payment_method == '100% оплата' %}
+                                            {{ _('100%% оплата') }}
+                                        {% else %}
+                                            {{ _(d.payment_method) }}
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end">{{ "%.1f"|format(d.mpp * 100) }}%</td>
                                     <td class="text-end">{{ "%.1f"|format(d.rop * 100) }}%</td>
                                     <td class="text-end">{{ "%.1f"|format(d.kd * 100) }}%</td>
