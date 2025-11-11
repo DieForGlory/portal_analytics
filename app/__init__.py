@@ -11,6 +11,7 @@ from .web.obligations_routes import obligations_bp
 from .core.config import DevelopmentConfig
 from .core.extensions import db
 from .core.db_utils import get_default_session
+from decimal import Decimal # <-- УБЕДИТЕСЬ, ЧТО ЭТОТ ИМПОРТ ЕСТЬ
 
 # 1. Инициализация расширений
 login_manager = LoginManager()
@@ -25,6 +26,10 @@ class CustomJSONEncoder(json.JSONEncoder):
         try:
             if isinstance(obj, (date, datetime)):
                 return obj.isoformat()
+            # --- ИСПРАВЛЕНИЕ: Добавляем обработку Decimal ---
+            elif isinstance(obj, Decimal):
+                return float(obj)
+            # ----------------------------------------------
             iterable = iter(obj)
         except TypeError:
             pass

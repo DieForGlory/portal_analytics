@@ -487,17 +487,23 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     planning_session = get_planning_session()
     sold_statuses = ["Сделка в работе", "Сделка проведена"]
 
-    # --- ИЗМЕНЕНИЕ: Получаем ключ MySQL ('flat') из русского property_type ('Квартира') ---
     mysql_prop_key = None
     if property_type:
         mysql_prop_key = map_russian_to_mysql_key(property_type)
-    # ---
 
     houses_in_complex = mysql_session.query(EstateHouse).filter_by(complex_name=complex_name).order_by(
         EstateHouse.name).all()
     houses_data = []
 
     active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+
+    # --- ДОБАВЛЕНО: Новая структура для детализации остатков по комнатам ---
+    remainder_details = defaultdict(lambda: defaultdict(lambda: {
+        'count': 0, 'total_price': 0, 'total_area': 0.0
+    }))
+    remainders_for_chart = defaultdict(lambda: {'total_price': 0, 'count': 0})
+    # ------------------------------------------------------------------------
+
 
     for house in houses_in_complex:
         house_details = {
@@ -511,7 +517,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
             total_units = mysql_session.query(func.count(EstateSell.id)).filter(
                 EstateSell.house_id == house.id,
-                EstateSell.estate_sell_category == mysql_key  # <-- ИСПОЛЬЗУЕМ КЛЮЧ MySQL
+                EstateSell.estate_sell_category == mysql_key
             ).scalar()
 
             if total_units == 0:
@@ -519,7 +525,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
             sold_units = mysql_session.query(func.count(EstateDeal.id)).join(EstateSell).filter(
                 EstateSell.house_id == house.id,
-                EstateSell.estate_sell_category == mysql_key,  # <-- ИСПОЛЬЗУЕМ КЛЮЧ MySQL
+                EstateSell.estate_sell_category == mysql_key,
                 EstateDeal.deal_status_name.in_(sold_statuses)
             ).scalar()
 
@@ -528,7 +534,6 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
             if remaining_count > 0:
                 total_discount_rate = 0
                 if active_version:
-                    # Здесь prop_type_enum (из planning_models) уже правильный
                     discount = planning_session.query(planning_models.Discount).filter_by(
                         version_id=active_version.id, complex_name=complex_name,
                         property_type=prop_type_enum, payment_method=planning_models.PaymentMethod.FULL_PAYMENT
@@ -538,12 +543,11 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
                 unsold_units = mysql_session.query(EstateSell).filter(
                     EstateSell.house_id == house.id,
-                    EstateSell.estate_sell_category == mysql_key,  # <-- ИСПОЛЬЗУЕМ КЛЮЧ MySQL
+                    EstateSell.estate_sell_category == mysql_key,
                     EstateSell.estate_sell_status_name.in_(["Подбор", "Маркетинговый резерв"])
                 ).all()
 
                 prices_per_sqm_list = []
-                # prop_type_enum - это 'Квартира', 'Парковка' и т.д.
                 deduction_amount = 3_000_000 if prop_type_enum == planning_models.PropertyType.FLAT else 0
 
                 for sell in unsold_units:
@@ -556,7 +560,6 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
                 if prices_per_sqm_list:
                     avg_price_per_sqm = sum(prices_per_sqm_list) / len(prices_per_sqm_list)
 
-            # --- ИЗМЕНЕНИЕ: Ключом должно быть РУССКОЕ название ---
             house_details["property_types_data"][prop_type_value] = {
                 "total_count": total_units,
                 "remaining_count": remaining_count,
@@ -565,6 +568,84 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
         if house_details["property_types_data"]:
             houses_data.append(house_details)
+
+    # --- ИСПРАВЛЕНИЕ: Блок расчета остатков для всей вкладки "Структура остатков" ---
+    if active_version:
+        for prop_type_enum in planning_models.PropertyType:
+            prop_type_value = prop_type_enum.value
+            mysql_key = map_russian_to_mysql_key(prop_type_value)
+
+            total_discount_rate = 0
+            discount = planning_session.query(planning_models.Discount).filter_by(
+                version_id=active_version.id,
+                complex_name=complex_name,
+                property_type=prop_type_enum,
+                payment_method=planning_models.PaymentMethod.FULL_PAYMENT
+            ).first()
+            if discount:
+                total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0) + (discount.action or 0)
+
+            remainder_sells_query = mysql_session.query(EstateSell).join(EstateHouse).filter(
+                EstateHouse.complex_name == complex_name,
+                EstateSell.estate_sell_category == mysql_key,
+                EstateSell.estate_sell_status_name.in_(["Подбор", "Маркетинговый резерв"])
+            )
+
+            deduction_amount = 3_000_000 if prop_type_enum == planning_models.PropertyType.FLAT else 0
+
+            if property_type and prop_type_value != property_type:
+                 continue
+
+            for sell in remainder_sells_query.all():
+                if sell.estate_price and sell.estate_price > deduction_amount and sell.estate_area and sell.estate_area > 0 and sell.estate_rooms is not None:
+
+                    price_after_deduction = sell.estate_price - deduction_amount
+                    final_price = price_after_deduction * (1 - total_discount_rate)
+
+                    rooms_key = str(int(sell.estate_rooms)) if sell.estate_rooms else '0'
+
+                    remainders_for_chart[prop_type_value]['total_price'] += final_price
+                    remainders_for_chart[prop_type_value]['count'] += 1
+
+                    room_entry = remainder_details[prop_type_value][rooms_key]
+                    room_entry['count'] += 1
+                    room_entry['total_price'] += final_price
+                    room_entry['total_area'] += sell.estate_area
+
+        # Вычисляем среднюю цену за м² для детальной структуры
+        for prop_type_value in list(remainder_details.keys()):
+            for rooms_key, data in list(remainder_details[prop_type_value].items()):
+                if data['total_area'] > 0:
+                    data['avg_price_sqm'] = float(data['total_price']) / float(data['total_area'])
+                else:
+                    data['avg_price_sqm'] = 0.0
+
+        # --- FIX: Convert defaultdicts to standard dicts and ensure clean types ---
+
+        # 1. Cleaning remainders_for_chart (KPI summary)
+        remainders_by_type = {}
+        for k, v in remainders_for_chart.items():
+            if v['count'] > 0:
+                 remainders_by_type[k] = {
+                     'total_price': float(v['total_price']),
+                     'count': int(v['count'])
+                 }
+
+        # 2. Cleaning remainder_details (Accordion data)
+        final_remainder_details = defaultdict(dict)
+        for prop_type, rooms_data in remainder_details.items():
+            for rooms_key, data in rooms_data.items():
+                final_remainder_details[prop_type][rooms_key] = {
+                    'count': int(data['count']),
+                    'total_price': float(data['total_price']),
+                    'total_area': float(data['total_area']),
+                    'avg_price_sqm': float(data.get('avg_price_sqm', 0.0))
+                }
+        # -------------------------------------------------------------------------
+    else:
+        remainders_by_type = {}
+        final_remainder_details = {}
+
 
     # --- ИЗМЕНЕНИЕ: Фильтруем KPI по типу недвижимости, если он выбран ---
     volume_query = mysql_session.query(func.sum(EstateDeal.deal_sum)).join(EstateSell).join(EstateHouse).filter(
@@ -583,46 +664,6 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         income_query = income_query.filter(EstateSell.estate_sell_category == mysql_prop_key)
     total_income = income_query.scalar() or 0
     # --- КОНЕЦ ИЗМЕНЕНИЯ ---
-
-    remainders_by_type = {}
-    if active_version:  # Убедимся, что active_version существует
-        for prop_type_enum in planning_models.PropertyType:
-            prop_type_value = prop_type_enum.value  # Русское 'Квартира'
-            mysql_key = map_russian_to_mysql_key(prop_type_value)  # 'flat'
-
-            total_discount_rate = 0
-            discount = planning_session.query(planning_models.Discount).filter_by(
-                version_id=active_version.id,
-                complex_name=complex_name,
-                property_type=prop_type_enum,  # Enum 'Квартира'
-                payment_method=planning_models.PaymentMethod.FULL_PAYMENT
-            ).first()
-            if discount:
-                total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
-
-            remainder_sells_query = mysql_session.query(EstateSell).join(EstateHouse).filter(
-                EstateHouse.complex_name == complex_name,
-                EstateSell.estate_sell_category == mysql_key,  # <-- ИСПОЛЬЗУЕМ КЛЮЧ MySQL
-                EstateSell.estate_sell_status_name.in_(["Подбор", "Маркетинговый резерв"])
-            )
-
-            total_discounted_price = 0
-            count_remainder = 0
-            deduction_amount = 3_000_000 if prop_type_enum == planning_models.PropertyType.FLAT else 0
-
-            for sell in remainder_sells_query.all():
-                if sell.estate_price and sell.estate_price > deduction_amount:
-                    price_after_deduction = sell.estate_price - deduction_amount
-                    final_price = price_after_deduction * (1 - total_discount_rate)
-                    total_discounted_price += final_price
-                    count_remainder += 1
-
-            if count_remainder > 0:
-                # --- ИСПОЛЬЗУЕМ РУССКОЕ НАЗВАНИЕ КАК КЛЮЧ ---
-                remainders_by_type[prop_type_value] = {
-                    'total_price': total_discounted_price,
-                    'count': count_remainder
-                }
 
     yearly_plan_fact = {
         'labels': [f"{i:02}" for i in range(1, 13)],
@@ -649,10 +690,8 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         EstateDeal.deal_status_name.in_(sold_statuses),
         extract('year', effective_date) == today.year
     )
-    # --- ИЗМЕНЕНИЕ: Фильтруем по ключу MySQL ---
     if mysql_prop_key:
         volume_query = volume_query.filter(EstateSell.estate_sell_category == mysql_prop_key)
-    # ---
     for row in volume_query.group_by('month').all():
         fact_volume_by_month[row.month - 1] = row.total or 0
     yearly_plan_fact['fact_volume'] = fact_volume_by_month
@@ -666,15 +705,12 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         FinanceOperation.status_name == 'Проведено',
         extract('year', FinanceOperation.date_added) == today.year
     )
-    # --- ИЗМЕНЕНИЕ: Фильтруем по ключу MySQL ---
     if mysql_prop_key:
         income_query = income_query.filter(EstateSell.estate_sell_category == mysql_prop_key)
-    # ---
     for row in income_query.group_by('month').all():
         fact_income_by_month[row.month - 1] = row.total or 0
     yearly_plan_fact['fact_income'] = fact_income_by_month
 
-    # --- ИЗМЕНЕНИЕ: Получаем ключ 'flat' (mysql_key), а не русское название ---
     deals_query = mysql_session.query(
         EstateDeal.id, EstateDeal.deal_sum, EstateSell.estate_sell_category.label('mysql_key'),
         func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date).label('deal_date')
@@ -689,35 +725,30 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date).desc()
     ).limit(15).all()
 
-    # --- ИЗМЕНЕНИЕ: Конвертируем 'mysql_key' в 'property_type' (русский) ---
     recent_deals = []
     for deal in recent_deals_raw:
         recent_deals.append({
             'id': deal.id,
             'deal_sum': deal.deal_sum,
-            'property_type': map_mysql_key_to_russian_value(deal.mysql_key),  # <-- Перевод
-            'deal_date': deal.deal_date  # Оставляем объект date для шаблона
+            'property_type': map_mysql_key_to_russian_value(deal.mysql_key),
+            'deal_date': deal.deal_date
         })
-    # ---
 
     remainders_chart_data = {"labels": [], "data": []}
     if remainders_by_type:
-        # Ключи УЖЕ русские ('Квартира')
         remainders_chart_data["labels"] = list(remainders_by_type.keys())
         remainders_chart_data["data"] = [v['count'] for v in remainders_by_type.values()]
 
     sales_analysis = {"by_floor": {}, "by_rooms": {}, "by_area": {}}
-
-    # property_type - это 'Квартира' (русский) или None
+    total_remainders_count = sum(v['count'] for v in remainders_by_type.values())
     type_to_analyze_russian = property_type if property_type else 'Квартира'
-    # mysql_key - это 'flat'
     type_to_analyze_mysql = map_russian_to_mysql_key(type_to_analyze_russian)
 
-    if type_to_analyze_russian == 'Квартира':  # Анализ по этажам/комнатам только для квартир
+    if type_to_analyze_russian == 'Квартира':
         base_query = mysql_session.query(EstateSell).join(EstateDeal).join(EstateHouse).filter(
             EstateHouse.complex_name == complex_name,
             EstateDeal.deal_status_name.in_(sold_statuses),
-            EstateSell.estate_sell_category == type_to_analyze_mysql  # <-- ИСПОЛЬЗУЕМ КЛЮЧ MySQL
+            EstateSell.estate_sell_category == type_to_analyze_mysql
         )
 
         floor_data = base_query.with_entities(EstateSell.estate_floor, func.count(EstateSell.id)).group_by(
@@ -744,16 +775,28 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         if area_data:
             sales_analysis['by_area']['labels'] = [row[0] for row in area_data if row[0] is not None]
             sales_analysis['by_area']['data'] = [row[1] for row in area_data if row[0] is not None]
-
+    final_remainder_details = {}  # Изменено с defaultdict на чистый dict
+    for prop_type, rooms_data in remainder_details.items():
+        final_remainder_details[prop_type] = {}  # Инициализация внутреннего dict
+        for rooms_key, data in rooms_data.items():
+            final_remainder_details[prop_type][rooms_key] = {
+                'count': int(data['count']),
+                'total_price': float(data['total_price']),
+                'total_area': float(data['total_area']),
+                'avg_price_sqm': float(data.get('avg_price_sqm', 0.0))
+            }
     dashboard_data = {
         "complex_name": complex_name,
         "kpi": {"total_deals_volume": total_deals_volume, "total_income": total_income,
-                "remainders_by_type": remainders_by_type},
+                # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+                "remainders_by_type": remainders_by_type,
+                "total_remainders_count": total_remainders_count  # <-- НОВОЕ ПОЛЕ
+                },
         "charts": {
             "plan_fact_dynamics_yearly": yearly_plan_fact,
             "remainders_chart_data": remainders_chart_data,
+            "remainder_details": final_remainder_details,
             "sales_analysis": sales_analysis,
-            # --- ИЗМЕНЕНИЕ: Передаем ключ MySQL ('flat' или None) ---
             "price_dynamics": get_price_dynamics_data(complex_name, mysql_prop_key)
         },
         "recent_deals": recent_deals,
@@ -922,7 +965,8 @@ def get_price_dynamics_data(complex_name: str, mysql_property_key: str = None):
     }
     for row in results:
         price_dynamics["labels"].append(f"{int(row.deal_month):02d}.{int(row.deal_year)}")
-        price_dynamics["data"].append(row.avg_price)
+        # ИСПРАВЛЕНИЕ: Явно преобразуем Decimal в float
+        price_dynamics["data"].append(float(row.avg_price))
 
     return price_dynamics
 

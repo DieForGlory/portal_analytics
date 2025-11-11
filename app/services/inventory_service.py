@@ -10,7 +10,7 @@ from app.models.planning_models import map_mysql_key_to_russian_value
 from app.models.planning_models import DiscountVersion, PaymentMethod, PropertyType
 from app.models.estate_models import EstateSell, EstateHouse
 from app.models.exclusion_models import ExcludedComplex
-
+from app.core.extensions import db
 
 def get_inventory_summary_data():
     default_session = get_default_session()
@@ -64,8 +64,11 @@ def get_inventory_summary_data():
             # Используем Enum из planning_models
             prop_type_enum = PropertyType(russian_category_value)
             complex_name = sell.house.complex_name
+            if not complex_name:
+                continue
         except ValueError:
             continue
+
 
         discount = discounts_map.get((complex_name, prop_type_enum))
         bottom_price = 0

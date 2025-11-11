@@ -15,7 +15,7 @@ from ..core.db_utils import get_planning_session, get_mysql_session, get_default
 from ..models import planning_models
 from ..models.estate_models import EstateSell
 from .email_service import send_email
-
+from ..models.planning_models import map_russian_to_mysql_key
 
 def delete_draft_version(version_id: int):
     """Удаляет версию, если она никогда не была активна."""
@@ -141,7 +141,8 @@ def get_discounts_with_summary():
     print("\n" + "=" * 80)
     print("[DISCOUNT SERVICE DEBUG] 🔍 НАЧАЛО get_discounts_with_summary()")
     print("=" * 80)
-
+    mysql_flat_key = map_russian_to_mysql_key(planning_models.PropertyType.FLAT.value)  # <-- ИСПОЛЬЗУЕМ МАППЕР
+    print(f"[5.5] MySQL ключ для 'Квартира': {mysql_flat_key}")
     try:
         # 1. Проверяем активную версию скидок
         active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
@@ -203,7 +204,7 @@ def get_discounts_with_summary():
         print(f"    Список ЖК с квартирами: {list(sells_by_complex.keys())[:5]}...")
 
         final_data = {}
-        valid_statuses = ["Маркетинговый резерв", "Подбор", "Бронь"]
+        valid_statuses = ["Маркетинговый резерв", "Подбор"]
         print(f"\n[9] Валидные статусы для подсчета: {valid_statuses}")
 
         tag_fields = {'kd': 'КД', 'opt': 'ОПТ', 'gd': 'ГД', 'holding': 'Холдинг', 'shareholder': 'Акционер'}
@@ -260,7 +261,7 @@ def get_discounts_with_summary():
                     valid_status_count += 1
 
                     # Проверка 2: Категория (Квартира)
-                    if sell.estate_sell_category == planning_models.PropertyType.FLAT.value:
+                    if sell.estate_sell_category == mysql_flat_key:
                         flat_category_count += 1
 
                         # Проверка 3: Цена и площадь
