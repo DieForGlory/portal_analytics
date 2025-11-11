@@ -154,7 +154,7 @@ def get_discounts_with_summary():
         if s.house: sells_by_complex.setdefault(s.house.complex_name, []).append(s)
 
     final_data = {}
-    valid_statuses = ["Маркетинговый резерв", "Подбор"]
+    valid_statuses = ["Маркетинговый резерв", "Подбор","Бронь"]
     tag_fields = {'kd': 'КД', 'opt': 'ОПТ', 'gd': 'ГД', 'holding': 'Холдинг', 'shareholder': 'Акционер'}
     all_complex_names = sorted(list(discounts_map.keys()))
 

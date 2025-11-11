@@ -1,35 +1,19 @@
-# app/core/db_utils.py
 from ..core.extensions import db
-
 
 def get_mysql_session():
     """
-    Возвращает НОВУЮ, ПРАВИЛЬНУЮ сессию, привязанную к MySQL.
+    Возвращает СТАНДАРТНУЮ сессию.
+    Модели с __bind_key__ = 'mysql_source' сами выберут этот bind.
     """
-    # 1. Получаем "движок" (engine) для нужной базы
-    engine = db.get_engine(bind_key='mysql_source')
-
-    # 2. ИСПРАВЛЕНИЕ ЗДЕСЬ:
-    #    Передаем 'bind=engine' как именованный аргумент,
-    #    а НЕ как словарь {'bind': engine}
-    return db.create_session(bind=engine)
-
+    return db.session
 
 def get_planning_session():
     """
-    Возвращает НОВУЮ, ПРАВИЛЬНУЮ сессию, привязанную к planning.db.
+    Возвращает СТАНДАРТНУЮ сессию.
+    Модели с __bind_key__ = 'planning_db' сами выберут этот bind.
     """
-    # 1. Получаем "движок" (engine)
-    engine = db.get_engine(bind_key='planning_db')
-
-    # 2. ИСПРАВЛЕНИЕ ЗДЕСЬ:
-    #    Передаем 'bind=engine' как именованный аргумент
-    return db.create_session(bind=engine)
-
+    return db.session
 
 def get_default_session():
-    """
-    Возвращает сессию по умолчанию (main_app.db).
-    """
-    # db.session - это правильный способ получить сессию по умолчанию
+    """Возвращает сессию по умолчанию (main_app.db)."""
     return db.session
