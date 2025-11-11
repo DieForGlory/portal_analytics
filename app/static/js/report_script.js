@@ -39,18 +39,42 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function restoreState() {
+        // 1. Восстановление валюты (без изменений)
         const savedCurrencyIsUSD = localStorage.getItem(STORAGE_KEYS.currency);
         if (savedCurrencyIsUSD === 'true' && currencyToggle) {
             currencyToggle.checked = true;
         }
         updateCurrency(currencyToggle ? currencyToggle.checked : false);
 
+        // 2. Восстановление вкладки (ИЗМЕНЕНО)
         const savedTabId = localStorage.getItem(STORAGE_KEYS.activeTab);
         if (savedTabId) {
-            const tabTrigger = document.querySelector(`button[data-bs-target="${savedTabId}"]`);
-            if (tabTrigger) {
-                const tab = new bootstrap.Tab(tabTrigger);
-                tab.show();
+            // Найти активные по умолчанию (hardcoded)
+            const defaultActiveTab = document.querySelector('.nav-tabs .nav-link.active');
+            const defaultActivePane = document.querySelector('.tab-content .tab-pane.show.active');
+
+            // Найти сохраненную вкладку и ее панель
+            const savedTabTrigger = document.querySelector(`button[data-bs-target="${savedTabId}"]`);
+            // Проверяем, существует ли элемент (на случай, если ID изменится)
+            if (savedTabTrigger) {
+                const savedPane = document.querySelector(savedTabId);
+
+                if (savedPane) {
+                    // Убрать 'active' у элементов по умолчанию
+                    if (defaultActiveTab) defaultActiveTab.classList.remove('active');
+                    if (defaultActivePane) {
+                        defaultActivePane.classList.remove('show');
+                        defaultActivePane.classList.remove('active');
+                    }
+
+                    // Добавить 'active' сохраненным
+                    savedTabTrigger.classList.add('active');
+                    savedPane.classList.add('show');
+                    savedPane.classList.add('active');
+                }
+            } else {
+                 // Если сохраненный ID вкладки не найден, очищаем localStorage
+                 localStorage.removeItem(STORAGE_KEYS.activeTab);
             }
         }
     }

@@ -16,6 +16,11 @@ class EstateDeal(db.Model):
     estate_sell_id = db.Column(db.Integer, db.ForeignKey('estate_sells.id'), nullable=False)
     date_modified = db.Column(db.Date, nullable=True)
     deal_status_name = db.Column(db.String(100))
+
+    # --- ВОТ ИСПРАВЛЕНИЕ: ДОБАВЛЕНО ПОЛЕ ---
+    deal_program_name = db.Column(db.String(255), nullable=True)
+    # ------------------------------------
+
     agreement_date = db.Column(db.Date, nullable=True)
     preliminary_date = db.Column(db.Date, nullable=True)
     deal_sum = db.Column(db.Float, nullable=True)

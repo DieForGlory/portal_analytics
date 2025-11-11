@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
     }
 
-    const usdRate = parseFloat(document.body.dataset.usdRate) || 12650;
+    const usdRate = parseFloat(document.body.dataset.usdRate) || 13000;
     const initializedCharts = {}; // Хранилище для созданных графиков
 
     // --- ОБЩАЯ ФУНКЦИЯ ФОРМАТИРОВАНИЯ ВАЛЮТ ---
@@ -14,141 +14,12 @@ document.addEventListener('DOMContentLoaded', function () {
         return prefix + new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
     }
 
-    // --- МОДУЛЬ ДЛЯ АНАЛИЗА СТОЯКОВ ---
-    const riserAnalysisModule = {
-        chartInstance: null,
-        currentSort: 'total', // 'total', 'sold', 'remaining'
-
-        init: () => {
-            const chartCanvas = document.getElementById('riserAnalysisChart');
-            if (!chartCanvas) return; // Графика нет на странице
-
-            const houseFilter = document.getElementById('riserHouseFilter');
-            const propTypeFilter = document.getElementById('riserPropTypeFilter');
-            const sortButton = document.getElementById('riserSortToggle');
-
-            if (!window.riserAnalysisData || !window.riserFilterOptions) {
-                console.error('Данные для анализа стояков (riserAnalysisData или riserFilterOptions) не найдены.');
-                document.getElementById('riserAnalysisError').textContent = window.i18n.no_riser_data || 'Ошибка загрузки данных.';
-                document.getElementById('riserAnalysisError').classList.remove('d-none');
-                return;
-            }
-
-            // 1. Заполнить фильтры
-            riserAnalysisModule.populateFilters(houseFilter, propTypeFilter);
-
-            // 2. Добавить слушатели
-            houseFilter.addEventListener('change', riserAnalysisModule.updateChart);
-            propTypeFilter.addEventListener('change', riserAnalysisModule.updateChart);
-            sortButton.addEventListener('click', riserAnalysisModule.toggleSort);
-
-            // 3. Первая отрисовка
-            riserAnalysisModule.updateChart();
-        },
-
-        populateFilters: (houseFilter, propTypeFilter) => {
-            houseFilter.innerHTML = `<option value="all">${window.i18n.all_houses}</option>` +
-                window.riserFilterOptions.houses.map(h => `<option value="${h}">${h}</option>`).join('');
-
-            propTypeFilter.innerHTML = `<option value="all">${window.i18n.all_prop_types}</option>` +
-                window.riserFilterOptions.prop_types.map(p => `<option value="${p}">${p}</option>`).join('');
-        },
-
-        toggleSort: (e) => {
-            const button = e.currentTarget;
-            const buttonText = button.querySelector('span');
-
-            if (riserAnalysisModule.currentSort === 'total') {
-                riserAnalysisModule.currentSort = 'sold';
-                buttonText.textContent = window.i18n.sort_sold_desc;
-            } else if (riserAnalysisModule.currentSort === 'sold') {
-                riserAnalysisModule.currentSort = 'remaining';
-                buttonText.textContent = window.i18n.sort_remain_desc;
-            } else {
-                riserAnalysisModule.currentSort = 'total';
-                buttonText.textContent = window.i18n.sort_total;
-            }
-            riserAnalysisModule.updateChart();
-        },
-
-        updateChart: () => {
-            const selectedHouse = document.getElementById('riserHouseFilter').value;
-            const selectedPropType = document.getElementById('riserPropTypeFilter').value;
-            const errorDisplay = document.getElementById('riserAnalysisError');
-
-            // 1. Фильтрация данных
-            const filteredData = window.riserAnalysisData.filter(item => {
-                const houseMatch = (selectedHouse === 'all' || item.house === selectedHouse);
-                const propTypeMatch = (selectedPropType === 'all' || item.prop_type === selectedPropType);
-                return houseMatch && propTypeMatch;
-            });
-
-            // 2. Сортировка данных
-            filteredData.sort((a, b) => {
-                if (riserAnalysisModule.currentSort === 'sold') {
-                    return b.sold - a.sold;
-                } else if (riserAnalysisModule.currentSort === 'remaining') {
-                    return b.remaining - a.remaining;
-                } else { // 'total'
-                    return (b.sold + b.remaining) - (a.sold + a.remaining);
-                }
-            });
-
-            // 3. Подготовка данных для графика
-            const labels = filteredData.map(item => {
-                let label = window.i18n.riser_label
-                            .replace('%(rooms)s', item.rooms)
-                            .replace('%(area)s', item.area);
-                if (selectedHouse === 'all') {
-                    label = `${item.house} / ${label}`;
-                }
-                return label;
-            });
-            const soldData = filteredData.map(item => item.sold);
-            const remainingData = filteredData.map(item => item.remaining);
-
-            // 4. Проверка на пустые данные
-            if(filteredData.length === 0) {
-                 errorDisplay.textContent = window.i18n.no_riser_data;
-                 errorDisplay.classList.remove('d-none');
-                 if(riserAnalysisModule.chartInstance) riserAnalysisModule.chartInstance.destroy();
-                 riserAnalysisModule.chartInstance = null;
-                 return;
-            } else {
-                errorDisplay.classList.add('d-none');
-            }
-
-
-            // 5. Отрисовка/Обновление
-            const ctx = document.getElementById('riserAnalysisChart').getContext('2d');
-            if (riserAnalysisModule.chartInstance) {
-                riserAnalysisModule.chartInstance.data.labels = labels;
-                riserAnalysisModule.chartInstance.data.datasets[0].data = soldData;
-                riserAnalysisModule.chartInstance.data.datasets[1].data = remainingData;
-                riserAnalysisModule.chartInstance.update();
-            } else {
-                riserAnalysisModule.chartInstance = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            { label: window.i18n.sold, data: soldData, backgroundColor: 'rgba(75, 192, 192, 0.7)' },
-                            { label: window.i18n.remaining, data: remainingData, backgroundColor: 'rgba(255, 99, 132, 0.7)' }
-                        ]
-                    },
-                    options: {
-                        responsive: true, maintainAspectRatio: false,
-                        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } },
-                        plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index' } }
-                    }
-                });
-            }
-        }
-    };
-
-
     // --- РЕЕСТР ФУНКЦИЙ ДЛЯ СОЗДАНИЯ ГРАФИКОВ ---
     const chartInitializers = {
+
+        /**
+         * График: План/Факт по динамике
+         */
         'planFactChart': (isUsd) => {
             const dynamics = charts_json_data.plan_fact_dynamics_yearly;
             if (!dynamics) return;
@@ -169,7 +40,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: value => formatCurrency(value, isUsd) } } }, plugins: { tooltip: { callbacks: { label: context => `${context.dataset.label}: ${formatCurrency(context.parsed.y, isUsd)}` } } } }
             });
         },
-        'analysisCharts': () => { // Эта функция инициализирует все 3 графика спроса
+
+        /**
+         * Графики: Анализ спроса (Этаж, Комнаты, Площадь)
+         */
+        'analysisCharts': () => {
             if (!charts_json_data.sales_analysis) return;
             const analysisChartsToRender = [
                 { id: 'floorChart', data: charts_json_data.sales_analysis.by_floor, label: window.i18n.units_sold },
@@ -189,6 +64,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             });
         },
+
+        /**
+         * График: Динамика цен
+         */
         'priceDynamicsChart': (isUsd) => {
             const chartData = charts_json_data.price_dynamics;
             const ctx = document.getElementById('priceDynamicsChart');
@@ -206,48 +85,52 @@ document.addEventListener('DOMContentLoaded', function () {
                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, ticks: { callback: value => formatCurrency(value, isUsd) } } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: context => `${context.dataset.label}: ${formatCurrency(context.parsed.y, isUsd)}` } } } }
             });
         },
-        // --- ОБНОВЛЕННАЯ/ДОБАВЛЕННАЯ ФУНКЦИЯ ДЛЯ ГРАФИКА ЭТАЖЕЙ ---
-        'floorRemaindersChart': () => {
-            const chartData = charts_json_data.remainders_by_floor;
-            const errorDisplay = document.getElementById('floorRemaindersError');
-            const ctx = document.getElementById('floorRemaindersChart');
-            if (!ctx) return;
 
-            if (!chartData || !chartData.data || !chartData.data.length) {
-                if(errorDisplay) {
-                    errorDisplay.textContent = window.i18n.no_floor_data;
-                    errorDisplay.classList.remove('d-none');
+        // --- УДАЛЕНА ФУНКЦИЯ 'paymentTypeChart' ---
+
+        // --- НОВАЯ ФУНКЦИЯ: ЗАПОЛНЕНИЕ KPI ТЕМПА ПРОДАЖ ---
+        'salesPaceMetrics': () => {
+            const paceData = charts_json_data.sales_pace_kpi;
+            const errorDiv = document.getElementById('salesPaceError');
+            if (!paceData) {
+                 if(errorDiv) {
+                    errorDiv.textContent = window.i18n.no_pace_data || 'Нет данных для расчета темпа.';
+                    errorDiv.classList.remove('d-none');
                 }
                 return;
             }
-            if(errorDisplay) errorDisplay.classList.add('d-none');
+            if(errorDiv) errorDiv.classList.add('d-none');
 
-            initializedCharts['floorRemaindersChart'] = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: chartData.labels,
-                    datasets: [{
-                        label: window.i18n.remaining_qty_short,
-                        data: chartData.data,
-                        backgroundColor: 'rgba(255, 159, 64, 0.7)',
-                        borderColor: 'rgba(255, 159, 64, 1)'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1,
-                                callback: function(value) { if (Number.isInteger(value)) { return value; } } // Показать только целые числа
-                            }
-                        }
+            // Заполняем KPI
+            const currentEl = document.getElementById('pace-current');
+            const maxEl = document.getElementById('pace-max');
+            const minEl = document.getElementById('pace-min');
+
+            if(currentEl) currentEl.textContent = paceData.current.toFixed(1);
+            if(maxEl) maxEl.textContent = paceData.max.toFixed(1);
+            if(minEl) minEl.textContent = paceData.min.toFixed(1);
+
+            // Рисуем квартальный график
+            const ctx = document.getElementById('paceQuarterlyChart');
+            if (ctx && paceData.quarterly_comparison && paceData.quarterly_comparison.data.length > 0) {
+                initializedCharts['paceQuarterlyChart'] = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: paceData.quarterly_comparison.labels,
+                        datasets: [{
+                            label: window.i18n.quarterly_pace || 'Темп',
+                            data: paceData.quarterly_comparison.data,
+                            backgroundColor: 'rgba(153, 102, 255, 0.7)'
+                        }]
                     },
-                    plugins: { legend: { display: false } }
-                }
-            });
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true } },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
         }
     };
 
@@ -261,19 +144,22 @@ document.addEventListener('DOMContentLoaded', function () {
             const isUsd = document.getElementById('currencyToggle')?.checked;
 
             // Определяем, какой график нужно нарисовать
+
+            // --- ВКЛАДКА "СТРУКТУРА ПРОДАЖ" (ИЗМЕНЕНО) ---
             if (targetPaneId === '#remainders-pane') {
-                // Инициализируем оба графика на этой вкладке, если они еще не созданы
-                if (document.getElementById('riserAnalysisChart') && !initializedCharts['riserAnalysisChart']) {
-                    riserAnalysisModule.init();
-                    initializedCharts['riserAnalysisChart'] = true; // Отмечаем, что модуль инициализирован
-                }
-                if (document.getElementById('floorRemaindersChart') && !initializedCharts['floorRemaindersChart']) {
-                    chartInitializers.floorRemaindersChart();
+                // (Pie chart УДАЛЕН)
+                if (!initializedCharts['salesPaceMetrics']) { // Используем ключ-маркер
+                    chartInitializers.salesPaceMetrics();
+                    initializedCharts['salesPaceMetrics'] = true; // Отмечаем, что инициализировали
                 }
             }
+
+            // --- ВКЛАДКА "АНАЛИЗ СПРОСА" ---
             if (targetPaneId === '#analysis-pane' && !initializedCharts['floorChart']) {
                 chartInitializers.analysisCharts();
             }
+
+            // --- ВКЛАДКА "АНАЛИЗ ЦЕН" ---
             if (targetPaneId === '#pricing-pane' && !initializedCharts['priceDynamicsChart']) {
                 chartInitializers.priceDynamicsChart(isUsd);
             }
@@ -282,18 +168,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 2. Первичная инициализация графика на активной по-умолчанию вкладке
     const isInitiallyUsd = document.getElementById('currencyToggle')?.checked;
-    if (!initializedCharts['planFactChart']) {
-        chartInitializers.planFactChart(isInitiallyUsd);
-    }
-    // Проверяем, не активна ли вкладка с остатками по умолчанию
-    if(document.querySelector('#remainders-pane.show.active')) {
-         if (document.getElementById('riserAnalysisChart') && !initializedCharts['riserAnalysisChart']) {
-            riserAnalysisModule.init();
-            initializedCharts['riserAnalysisChart'] = true;
+
+    // Найти активную вкладку, которую установил report_script.js
+    const activeTabPane = document.querySelector('.tab-content .tab-pane.show.active');
+
+    if (!activeTabPane) {
+        // На всякий случай, если ничего не найдено, запускаем дефолтный
+        console.warn("Не найдена активная вкладка, запускаю график по умолчанию.");
+        if (!initializedCharts['planFactChart']) {
+            chartInitializers.planFactChart(isInitiallyUsd);
         }
-        if (document.getElementById('floorRemaindersChart') && !initializedCharts['floorRemaindersChart']) {
-            chartInitializers.floorRemaindersChart();
+    } else {
+        const activeTabId = activeTabPane.id;
+        console.log("Активная вкладка при загрузке:", activeTabId);
+
+        // Запускаем инициализатор для той вкладки, которая сейчас активна
+        if (activeTabId === 'dynamics-pane') {
+            if (!initializedCharts['planFactChart']) {
+                chartInitializers.planFactChart(isInitiallyUsd);
+            }
+        } else if (activeTabId === 'remainders-pane') {
+            if (!initializedCharts['salesPaceMetrics']) {
+                chartInitializers.salesPaceMetrics();
+                initializedCharts['salesPaceMetrics'] = true;
+            }
+        } else if (activeTabId === 'analysis-pane') {
+            if (!initializedCharts['floorChart']) {
+                chartInitializers.analysisCharts();
+            }
+        } else if (activeTabId === 'pricing-pane') {
+            if (!initializedCharts['priceDynamicsChart']) {
+                chartInitializers.priceDynamicsChart(isInitiallyUsd);
+            }
         }
+        // Другие вкладки (deals, houses) графиков не имеют
     }
 
 
