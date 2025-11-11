@@ -4,7 +4,7 @@ from collections import defaultdict
 from ..core.db_utils import get_mysql_session, get_planning_session, get_default_session
 import pandas as pd
 import io
-
+from app.models.planning_models import map_mysql_key_to_russian_value
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
 # Импортируем модели из их нового местоположения
 from app.models.planning_models import DiscountVersion, PaymentMethod, PropertyType
@@ -60,8 +60,9 @@ def get_inventory_summary_data():
         if not sell.house:
             continue
         try:
+            russian_category_value = map_mysql_key_to_russian_value(sell.estate_sell_category)
             # Используем Enum из planning_models
-            prop_type_enum = PropertyType(sell.estate_sell_category)
+            prop_type_enum = PropertyType(russian_category_value)
             complex_name = sell.house.complex_name
         except ValueError:
             continue
@@ -76,7 +77,7 @@ def get_inventory_summary_data():
                 total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0) + (discount.action or 0)
                 bottom_price = price_for_calc * (1 - total_discount_rate)
 
-        metrics = summary_by_complex[complex_name][sell.estate_sell_category]
+        metrics = summary_by_complex[complex_name][russian_category_value]
         metrics['units'] += 1
         metrics['total_area'] += sell.estate_area
         metrics['total_value'] += bottom_price

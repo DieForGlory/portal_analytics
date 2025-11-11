@@ -1,7 +1,7 @@
 # app/web/report_routes.py
 import json
 import os
-from datetime import date, timedelta # Убедитесь, что date импортирован
+from datetime import date, timedelta  # Убедитесь, что date импортирован
 from datetime import datetime
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, abort, send_file
@@ -20,7 +20,7 @@ from app.services import (
     inventory_service,
     manager_report_service,
     funnel_service,
-    obligation_service # Убедитесь, что obligation_service импортирован
+    obligation_service  # Убедитесь, что obligation_service импортирован
 )
 from app.web.forms import UploadPlanForm, UploadManagerPlanForm
 from ..models.finance_models import FinanceOperation
@@ -29,24 +29,19 @@ from ..models.estate_models import EstateHouse
 report_bp = Blueprint('report', __name__, template_folder='templates')
 
 
-# ... (остальные маршруты остаются без изменений, я их скрыл для краткости) ...
-
-
 @report_bp.route('/manager-kpi-calculate/<int:manager_id>/<int:year>/<int:month>')
 @login_required
 @permission_required('view_manager_report')
 def calculate_manager_kpi(manager_id, year, month):
-    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    planning_session = get_planning_session()
     mysql_session = get_mysql_session()
-    plan_entry = planning_models.ManagerSalesPlan.query.filter_by(
-        manager_id=manager_id, year=year, month=month
-    ).first()
-    plan_entry = planning_session.query(planning_models.ManagerSalesPlan).filter_by(  # <--- ИЗМЕНЕНО
+
+    plan_entry = planning_session.query(planning_models.ManagerSalesPlan).filter_by(
         manager_id=manager_id, year=year, month=month
     ).first()
     plan_income = plan_entry.plan_income if plan_entry else 0.0
 
-    fact_income_query = mysql_session.query(func.sum(FinanceOperation.summa)).filter(  # <--- ИЗМЕНЕНО
+    fact_income_query = mysql_session.query(func.sum(FinanceOperation.summa)).filter(
         FinanceOperation.manager_id == manager_id,
         extract('year', FinanceOperation.date_added) == year,
         extract('month', FinanceOperation.date_added) == month,
@@ -70,6 +65,10 @@ def calculate_manager_kpi(manager_id, year, month):
         'fact_amount': fact_income,
         'payment': payment
     }
+
+    # Не забываем закрывать сессии
+    planning_session.close()
+    mysql_session.close()
 
     return jsonify({'success': True, 'data': result})
 
@@ -229,7 +228,9 @@ def generate_complex_kp(sell_id):
         abort(400, "Некорректный формат данных (JSON).")
     if 'payment_schedule' in details:
         for payment in details['payment_schedule']:
-            payment['payment_date'] = datetime.strptime(payment['payment_date'], '%Y-%m-%d').date()
+            # Убедимся, что дата в правильном формате (может прийти как YYYY-MM-DD)
+            if isinstance(payment['payment_date'], str):
+                payment['payment_date'] = datetime.strptime(payment['payment_date'], '%Y-%m-%d').date()
     current_date = datetime.now().strftime("%d.%m.%Y %H:%M")
     usd_rate = currency_service.get_current_effective_rate()
     return render_template(
@@ -293,7 +294,7 @@ def export_plan_fact():
     today = date.today()
     year = request.args.get('year', today.year, type=int)
     month = request.args.get('month', today.month, type=int)
-    prop_type = request.args.get('property_type', planning_models.PropertyType.FLAT.value)
+    prop_type = request.args.get('property_type', 'All')  # <-- ИЗМЕНЕНО: По умолчанию 'All'
     excel_stream = report_service.generate_plan_fact_excel(year, month, prop_type)
     if excel_stream is None:
         flash("Нет данных для экспорта.", "warning")
@@ -311,19 +312,23 @@ def export_plan_fact():
 @login_required
 @permission_required('view_manager_report')
 def manager_performance_report():
-    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+    # --- ИСПРАВЛЕНИЕ: Используем get_default_session() ---
+    default_session = get_default_session()
     planning_session = get_planning_session()
+    # ---
+
     search_query = request.args.get('q', '')
     show_only_with_plan = request.args.get('with_plan', 'false').lower() == 'true'
 
-    query = mysql_session.query(auth_models.SalesManager)
+    # --- ИСПРАВЛЕНИЕ: Запрос к default_session ---
+    query = default_session.query(auth_models.SalesManager)
     if search_query:
         query = query.filter(auth_models.SalesManager.full_name.ilike(f'%{search_query}%'))
 
     managers = query.order_by(auth_models.SalesManager.full_name).all()
 
     if show_only_with_plan:
-        manager_ids_with_plans_query = planning_session.query(  # <--- ИЗМЕНЕНО
+        manager_ids_with_plans_query = planning_session.query(
             planning_models.ManagerSalesPlan.manager_id
         ).distinct().all()
         manager_ids_with_plans_set = {row[0] for row in manager_ids_with_plans_query}
@@ -334,6 +339,11 @@ def manager_performance_report():
         1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель', 5: 'Май', 6: 'Июнь',
         7: 'Июль', 8: 'Август', 9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'
     }
+
+    # --- Закрываем сессии ---
+    default_session.close()
+    planning_session.close()
+    # ---
 
     return render_template(
         'reports/manager_performance_overview.html',
@@ -500,4 +510,3 @@ def sales_funnel():
         filters={'start_date': start_date_str, 'end_date': end_date_str},
         active_view=view_mode
     )
-

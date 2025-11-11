@@ -127,3 +127,30 @@ class ManagerSalesPlan(db.Model):
         db.UniqueConstraint('manager_id', 'year', 'month', name='_manager_plan_period_uc'),
     )
 
+# --- НОВЫЕ ФУНКЦИИ-"ПЕРЕВОДЧИКИ" ---
+
+def map_russian_to_mysql_key(russian_value: str) -> str:
+    """
+    Переводит русское название типа ('Квартира') в ключ MySQL ('flat').
+    """
+    mapping = {
+        'Квартира': 'flat',
+        'Коммерческое помещение': 'comm',
+        'Парковка': 'garage',
+        'Кладовое помещение': 'storageroom'
+    }
+    # Возвращаем ключ, если он есть в словаре, или само значение (на всякий случай)
+    return mapping.get(russian_value, russian_value)
+
+def map_mysql_key_to_russian_value(mysql_key: str) -> str:
+    """
+    Переводит ключ MySQL ('flat') в русское название ('Квартира').
+    """
+    mapping = {
+        'flat': 'Квартира',
+        'comm': 'Коммерческое помещение',
+        'garage': 'Парковка',
+        'storageroom': 'Кладовое помещение'
+    }
+    # Возвращаем русское значение, если оно есть, или сам ключ
+    return mapping.get(mysql_key, mysql_key)

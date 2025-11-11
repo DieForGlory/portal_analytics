@@ -1,3 +1,4 @@
+# app/__init__.py
 import os
 from app import create_app
 from app.core.config import DevelopmentConfig
@@ -19,13 +20,17 @@ def setup_database():
         # Импортируем все модули с моделями, чтобы SQLAlchemy о них знала
         from app.models import (auth_models, planning_models, estate_models,
                                 finance_models, exclusion_models, funnel_models,
-                        special_offer_models)
+                                special_offer_models)
 
-        # Используем один вызов db.create_all(), который создаст таблицы
-        # в основной базе и во всех базах, указанных вSQLALCHEMY_BINDS.
-        print("--- [ОТЛАДКА] Вызов единого db.create_all() для всех баз... ---")
-        db.create_all()
-        print("--- [ОТЛАДКА] db.create_all() для всех баз завершен. ---")
+        print("--- [ОТЛАДКА] Создание таблиц для основной базы (main_app.db)... ---")
+        db.create_all(bind_key=None)
+
+        # Создаем таблицы только для базы 'planning_db'
+        print("--- [ОТЛАДКА] Создание таблиц для 'planning_db' (planning.db)... ---")
+        db.create_all(bind_key='planning_db')
+
+        print("--- [ОТЛАДКА] Создание таблиц завершено. 'mysql_source' пропущен (как и должно быть). ---")
+        # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
         # Код создания ролей и админа остается без изменений
         print("--- [ОТЛАДКА] Проверка существования ролей... ---")
@@ -58,7 +63,7 @@ def setup_database():
                     'view_selection', 'view_discounts', 'view_version_history', 'manage_discounts',
                     'manage_settings', 'manage_users', 'upload_data',
                     'view_plan_fact_report', 'view_inventory_report', 'view_manager_report', 'view_project_dashboard',
-                    'manage_specials','download_kpi_report'
+                    'manage_specials', 'download_kpi_report'
                 ]
             }
 
@@ -105,4 +110,9 @@ def setup_database():
 
 if __name__ == '__main__':
     print("[FLASK APP] 🚦 Запуск веб-сервера Flask...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+    # --- ДОБАВЬТЕ ЭТУ СТРОКУ ---
+    setup_database()
+    # ---------------------------
+
+    app.run(host='0.0.0.0', port=5100, debug=True)

@@ -9,7 +9,7 @@
         <h5><i class="bi bi-journal-plus me-2"></i>Добавить или обновить обязательство</h5>
     </div>
     <div class="card-body">
-        <form method="POST" action="{{ url_for('report.obligation_control') }}"> {# Убедитесь, что endpoint правильный #}
+        <form method="POST" action="{{ url_for('obligations.obligation_control') }}">
             <input type="hidden" name="action" value="add_obligation">
             <div class="row g-3 align-items-end">
                 <div class="col-md-3">
@@ -56,7 +56,7 @@
         <h5><i class="bi bi-calculator me-2"></i>Рассчитать требуемую цену для выполнения</h5>
     </div>
     <div class="card-body">
-        <form method="GET" action="{{ url_for('report.obligation_control') }}"> {# Убедитесь, что endpoint правильный #}
+        <form method="GET" action="{{ url_for('obligations.obligation_control') }}">
              <div class="row g-3 align-items-end">
                 <div class="col-md-4">
                     <label for="project_name_check" class="form-label">Проект</label>
@@ -139,7 +139,7 @@
                         <td>{{ _(obl.property_type) }}</td> {# <-- Выводим тип #}
                         <td class="text-end fw-bold">${{ "{:,.0f}".format(obl.amount_usd) }}</td>
                         <td class="text-end">
-                            <form method="POST" action="{{ url_for('report.obligation_control') }}" onsubmit="return confirm('Вы уверены, что хотите удалить обязательство для {{ obl.project_name }} ({{ _(obl.property_type) }})?');" class="d-inline"> {# Убедитесь, что endpoint правильный #}
+                            <form method="POST" action="{{ url_for('obligations.obligation_control') }}" onsubmit="return confirm('Вы уверены, что хотите удалить обязательство для {{ obl.project_name }} ({{ _(obl.property_type) }})?');" class="d-inline">
                                 <input type="hidden" name="action" value="delete_obligation">
                                 <input type="hidden" name="obligation_id" value="{{ obl.id }}">
                                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить">
