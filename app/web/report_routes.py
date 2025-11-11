@@ -20,7 +20,8 @@ from app.services import (
     inventory_service,
     manager_report_service,
     funnel_service,
-    obligation_service  # Убедитесь, что obligation_service импортирован
+    obligation_service,
+    project_dashboard_service  # <-- 1. ДОБАВЛЕН ИМПОРТ НОВОГО СЕРВИСА
 )
 from app.web.forms import UploadPlanForm, UploadManagerPlanForm
 from ..models.finance_models import FinanceOperation
@@ -249,7 +250,11 @@ def generate_complex_kp(sell_id):
 @permission_required('view_project_dashboard')
 def project_dashboard(complex_name):
     selected_prop_type = request.args.get('property_type', None)
-    data = report_service.get_project_dashboard_data(complex_name, selected_prop_type)
+
+    # --- 2. ИЗМЕНЯЕМ ВЫЗОВ СЕРВИСА ---
+    data = project_dashboard_service.get_project_dashboard_data(complex_name, selected_prop_type)
+    # --- КОНЕЦ ИЗМЕНЕНИЯ ---
+
     if not data:
         abort(404)
     property_types = [pt.value for pt in planning_models.PropertyType]
@@ -294,7 +299,7 @@ def export_plan_fact():
     today = date.today()
     year = request.args.get('year', today.year, type=int)
     month = request.args.get('month', today.month, type=int)
-    prop_type = request.args.get('property_type', 'All')  # <-- ИЗМЕНЕНО: По умолчанию 'All'
+    prop_type = request.args.get('property_type', 'All')
     excel_stream = report_service.generate_plan_fact_excel(year, month, prop_type)
     if excel_stream is None:
         flash("Нет данных для экспорта.", "warning")
