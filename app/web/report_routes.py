@@ -271,6 +271,24 @@ def project_dashboard(complex_name):
     )
 
 
+@report_bp.route('/project-passport/<path:complex_name>')
+@login_required
+@permission_required('view_project_dashboard')  # Используем то же право, что и для дашборда
+def project_passport(complex_name):
+    """Отображает страницу "Паспорт проекта"."""
+
+    passport_full_data = project_dashboard_service.get_project_passport_data(complex_name)
+
+    if not passport_full_data:
+        flash(f"Проект с названием '{complex_name}' не найден.", "danger")
+        return redirect(url_for('report.plan_fact_report'))
+
+    return render_template(
+        'reports/project_passport.html',
+        title=f"Паспорт проекта: {complex_name}",
+        data=passport_full_data,
+        static_data_json=json.dumps(passport_full_data.get('static_data', {}))  # Для JS
+    )
 @report_bp.route('/currency-settings', methods=['GET', 'POST'])
 @login_required
 @permission_required('manage_settings')

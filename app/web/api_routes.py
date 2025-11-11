@@ -3,6 +3,12 @@
 from flask import Blueprint, request, make_response
 from flask_restx import Api, Resource, fields, reqparse
 import json
+from flask_login import current_user
+from app.core.decorators import permission_required
+from app.core.db_utils import get_planning_session
+from app.models.planning_models import ProjectPassport
+from datetime import date
+
 
 # Импортируем все необходимые сервисы
 from app.services import (
@@ -140,3 +146,76 @@ class DiscountOverviewResource(Resource):
         if not discounts_data:
             return {'message': 'Активная система скидок не найдена или пуста'}, 404
         return discounts_data
+
+
+# ===================================================================
+#          НОВЫЙ NAMESPACE ДЛЯ ПАСПОРТА ПРОЕКТА
+# ===================================================================
+passport_ns = api.namespace('passport', description='Операции с Паспортом проекта')
+
+passport_model = passport_ns.model('ProjectPassportInput', {
+    'complex_name': fields.String(required=True),
+    'construction_type': fields.String,
+    'address_link': fields.String,
+    'heating_type': fields.String,
+    'finishing_type': fields.String,
+    'start_date': fields.String,
+    'current_stage': fields.String,
+    'project_manager': fields.String,
+    'chief_engineer': fields.String,
+    'sales_manager': fields.String,
+})
+
+
+@passport_ns.route('/save')
+class PassportSaveResource(Resource):
+    @passport_ns.expect(passport_model, validate=True)
+    @permission_required('manage_settings')  # Используем право админа
+    def post(self):
+        """Сохраняет статические данные Паспорта проекта."""
+        data = api.payload
+        planning_session = get_planning_session()
+
+        try:
+            complex_name = data.get('complex_name')
+            if not complex_name:
+                return {'success': False, 'error': 'complex_name is required'}, 400
+
+            passport = planning_session.query(ProjectPassport).get(complex_name)
+            if not passport:
+                passport = ProjectPassport(complex_name=complex_name)
+                planning_session.add(passport)
+
+            # Обновляем все поля
+            passport.construction_type = data.get('construction_type')
+            passport.address_link = data.get('address_link')
+            passport.heating_type = data.get('heating_type')
+            passport.finishing_type = data.get('finishing_type')
+            passport.current_stage = data.get('current_stage')
+            passport.project_manager = data.get('project_manager')
+            passport.chief_engineer = data.get('chief_engineer')
+            passport.sales_manager = data.get('sales_manager')
+
+            # Обрабатываем дату
+            start_date_str = data.get('start_date')
+            if start_date_str:
+                try:
+                    passport.start_date = date.fromisoformat(start_date_str)
+                except ValueError:
+                    passport.start_date = None
+            else:
+                passport.start_date = None
+
+            planning_session.commit()
+            return {'success': True, 'message': 'Паспорт проекта сохранен.'}
+
+        except Exception as e:
+            planning_session.rollback()
+            return {'success': False, 'error': str(e)}, 500
+        finally:
+            planning_session.close()
+
+
+# --- НЕ ЗАБУДЬТЕ ЗАРЕГИСТРИРОВАТЬ НОВЫЙ NAMESPACE ---
+
+api.add_namespace(passport_ns)

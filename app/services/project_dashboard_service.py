@@ -10,7 +10,7 @@ from ..core.db_utils import get_planning_session, get_mysql_session
 from ..models.estate_models import EstateDeal, EstateHouse, EstateSell
 from ..models.finance_models import FinanceOperation
 from ..models.planning_models import map_russian_to_mysql_key, map_mysql_key_to_russian_value
-
+from dateutil.relativedelta import relativedelta
 
 # --- ИЗВЛЕЧЕН ИЗ report_service.py ---
 def get_price_dynamics_data(complex_name: str, mysql_property_key: str = None):
@@ -438,3 +438,188 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     planning_session.close()
 
     return dashboard_data
+
+
+def get_project_passport_data(complex_name: str):
+    """
+    Собирает все статические и динамические данные для "Паспорта проекта".
+    """
+    mysql_session = get_mysql_session()
+    planning_session = get_planning_session()
+
+    sold_statuses = ["Сделка в работе", "Сделка проведена"]
+    remainder_statuses = ["Маркетинговый резерв", "Подбор"]
+
+    # 1. Получаем ID домов в комплексе
+    house_ids_query = mysql_session.query(EstateHouse.id).filter(EstateHouse.complex_name == complex_name)
+    house_ids = [h[0] for h in house_ids_query.all()]
+    if not house_ids:
+        return None  # Комплекс не найден в MySQL
+
+    # 2. Получаем статические данные из planning.db
+    passport_data = planning_session.query(planning_models.ProjectPassport).get(complex_name)
+    if not passport_data:
+        # Создаем пустую запись, если ее нет
+        passport_data = planning_models.ProjectPassport(complex_name=complex_name)
+        planning_session.add(passport_data)
+        planning_session.commit()
+
+    # 3. Получаем динамические данные
+
+    # Общее кол-во квартир (всех типов)
+    total_units = mysql_session.query(func.count(EstateSell.id)).filter(
+        EstateSell.house_id.in_(house_ids)
+    ).scalar()
+
+    # Остатки на сегодня (по типам)
+    active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+    remainders_by_type = defaultdict(lambda: {'count': 0, 'total_price': 0.0, 'total_area': 0.0})
+    total_remainders_count = 0
+
+    if active_version:
+        for prop_type_enum in planning_models.PropertyType:
+            prop_type_value = prop_type_enum.value
+            mysql_key = map_russian_to_mysql_key(prop_type_value)
+
+            discount = planning_session.query(planning_models.Discount).filter_by(
+                version_id=active_version.id, complex_name=complex_name,
+                property_type=prop_type_enum, payment_method=planning_models.PaymentMethod.FULL_PAYMENT
+            ).first()
+
+            total_discount_rate = 0
+            if discount:
+                total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0) + (
+                            discount.action or 0)
+
+            deduction_amount = 3_000_000 if prop_type_enum == planning_models.PropertyType.FLAT else 0
+
+            remainder_sells_query = mysql_session.query(EstateSell).filter(
+                EstateSell.house_id.in_(house_ids),
+                EstateSell.estate_sell_category == mysql_key,
+                EstateSell.estate_sell_status_name.in_(remainder_statuses),
+                EstateSell.estate_price.isnot(None),
+                EstateSell.estate_area.isnot(None),
+                EstateSell.estate_area > 0
+            )
+
+            for sell in remainder_sells_query.all():
+                final_price = 0
+                if sell.estate_price and sell.estate_price > deduction_amount:
+                    final_price = (sell.estate_price - deduction_amount) * (1 - total_discount_rate)
+
+                remainders_by_type[prop_type_value]['count'] += 1
+                remainders_by_type[prop_type_value]['total_price'] += final_price
+                remainders_by_type[prop_type_value]['total_area'] += sell.estate_area
+                total_remainders_count += 1
+
+    # Вычисляем среднюю цену дна
+    for prop_type, data in remainders_by_type.items():
+        if data['total_area'] > 0:
+            data['avg_price_sqm'] = data['total_price'] / data['total_area']
+        else:
+            data['avg_price_sqm'] = 0
+
+    # Кол-во мес до кадастра (берем для квартир)
+    months_to_cadastre = None
+    if active_version:
+        cadastre_date_q = planning_session.query(planning_models.Discount.cadastre_date).filter(
+            planning_models.Discount.version_id == active_version.id,
+            planning_models.Discount.complex_name == complex_name,
+            planning_models.Discount.property_type == planning_models.PropertyType.FLAT
+        ).first()
+        if cadastre_date_q and cadastre_date_q[0]:
+            delta = relativedelta(cadastre_date_q[0], date.today())
+            months_to_cadastre = delta.years * 12 + delta.months
+
+    # Темп продаж (за все время)
+    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+    all_sales_q = mysql_session.query(
+        func.count(EstateDeal.id),
+        func.min(effective_date),
+        func.max(effective_date)
+    ).join(EstateSell).filter(
+        EstateSell.house_id.in_(house_ids),
+        EstateDeal.deal_status_name.in_(sold_statuses),
+        effective_date.isnot(None)
+    )
+
+    total_sales, first_sale_date, last_sale_date = all_sales_q.one()
+
+    all_time_pace = 0
+    # Добавляем проверку, что все три значения получены
+    if total_sales and first_sale_date and last_sale_date:
+
+        # --- НАЧАЛО ИСПРАВЛЕНИЯ ---
+        # Конвертируем строки в date объекты, если они пришли как строки
+        if isinstance(first_sale_date, str):
+            first_sale_date = date.fromisoformat(first_sale_date)
+        if isinstance(last_sale_date, str):
+            last_sale_date = date.fromisoformat(last_sale_date)
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
+        months_of_sales = (last_sale_date - first_sale_date).days / 30.44
+        if months_of_sales < 1:
+            months_of_sales = 1  # Избегаем деления на ноль, если продажи были только в 1 день
+        all_time_pace = total_sales / months_of_sales
+
+    # Прогноз даты завершения продаж
+    forecast_date = None
+    if all_time_pace > 0:
+        pace_with_coeff = all_time_pace * 0.8  # Понижающий коэффициент 20%
+        if pace_with_coeff > 0:
+            months_to_sell = total_remainders_count / pace_with_coeff
+            forecast_date = date.today() + relativedelta(months=int(months_to_sell))
+
+    # Наиболее частый вид оплаты
+    payment_dist = get_payment_type_distribution(complex_name, None)  # Используем существующую функцию
+    top_payment_type = None
+    if payment_dist['labels']:
+        total_payment_deals = sum(payment_dist['data'])
+        top_payment_type = {
+            'name': payment_dist['labels'][0],
+            'percentage': (payment_dist['data'][0] / total_payment_deals) * 100 if total_payment_deals > 0 else 0
+        }
+
+    # Действующие скидки
+    active_discounts = []
+    if active_version:
+        discounts_q = planning_session.query(planning_models.Discount).filter(
+            planning_models.Discount.version_id == active_version.id,
+            planning_models.Discount.complex_name == complex_name
+        ).order_by(planning_models.Discount.property_type, planning_models.Discount.payment_method).all()
+
+        for d in discounts_q:
+            active_discounts.append({
+                'property_type': d.property_type.value,
+                'payment_method': d.payment_method.value,
+                'mpp': d.mpp or 0, 'rop': d.rop or 0, 'kd': d.kd or 0, 'action': d.action or 0
+            })
+
+    # Полная сумма ожидаемых оплат
+    expected_payments = mysql_session.query(func.sum(FinanceOperation.summa)).join(EstateSell).filter(
+        EstateSell.house_id.in_(house_ids),
+        FinanceOperation.status_name == "К оплате",
+        FinanceOperation.payment_type != "Возврат поступлений при отмене сделки"
+    ).scalar() or 0.0
+
+    # Собираем все в один словарь
+    dynamic_data = {
+        'total_units': total_units,
+        'months_to_cadastre': months_to_cadastre,
+        'all_time_sales_pace': all_time_pace,
+        'remainders_by_type': dict(remainders_by_type),
+        'total_remainders_count': total_remainders_count,
+        'top_payment_type': top_payment_type,
+        'forecast_date': forecast_date.isoformat() if forecast_date else None,
+        'active_discounts': active_discounts,
+        'expected_payments': expected_payments
+    }
+
+    mysql_session.close()
+    planning_session.close()
+
+    return {
+        'complex_name': complex_name,
+        'static_data': passport_data.to_dict(),
+        'dynamic_data': dynamic_data
+    }

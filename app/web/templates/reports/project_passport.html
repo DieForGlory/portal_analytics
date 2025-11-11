@@ -1,0 +1,389 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .passport-container {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 1.5rem;
+    }
+    .passport-section {
+        grid-column: span 12;
+    }
+    .passport-main {
+        grid-column: span 12;
+    }
+    .passport-sidebar {
+        grid-column: span 12;
+    }
+
+    @media (min-width: 992px) {
+        .passport-main {
+            grid-column: span 8;
+        }
+        .passport-sidebar {
+            grid-column: span 4;
+        }
+    }
+
+    .passport-card {
+        background-color: var(--bs-tertiary-bg);
+        border: 1px solid var(--bs-border-color-translucent);
+        border-radius: .75rem;
+        padding: 1.5rem;
+        height: 100%;
+    }
+    .passport-label {
+        font-size: 0.85rem;
+        color: var(--bs-secondary-color);
+        margin-bottom: 0.25rem;
+        display: block;
+    }
+    .passport-value {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--bs-body-color);
+        line-height: 1.2;
+    }
+    .passport-value-large {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: var(--bs-primary);
+    }
+    .passport-value-edit {
+        display: none; /* Скрыто по умолчанию */
+    }
+    .editing .passport-value-view {
+        display: none;
+    }
+    .editing .passport-value-edit {
+        display: block;
+    }
+    .discount-table th {
+        font-size: 0.8rem;
+        padding: 0.5rem;
+    }
+    .discount-table td {
+        font-size: 0.9rem;
+        padding: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <a href="{{ url_for('report.project_dashboard', complex_name=data.complex_name) }}" class="text-muted text-decoration-none small mb-1 d-block">
+            <i class="bi bi-arrow-left"></i> {{ _('Назад к дашборду') }}
+        </a>
+        <h1 class="gradient-heading mb-0">{{ data.complex_name }}</h1>
+    </div>
+    <div id="passport-controls" class="d-flex align-items-center gap-3">
+        {% if current_user.can('manage_settings') %}
+            <button id="edit-btn" class="btn btn-outline-warning">
+                <i class="bi bi-pencil me-2"></i>{{ _('Редактировать') }}
+            </button>
+            <button id="cancel-btn" class="btn btn-secondary" style="display: none;">
+                {{ _('Отмена') }}
+            </button>
+            <button id="save-btn" class="btn btn-success" style="display: none;">
+                <i class="bi bi-save me-2"></i>{{ _('Сохранить') }}
+            </button>
+        {% endif %}
+    </div>
+</div>
+
+<div class="passport-container" id="passport-form-container" data-complex-name="{{ data.complex_name }}">
+
+    <div class="passport-main">
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="passport-card">
+                    <span class="passport-label">{{ _('Общее кол-во квартир') }}</span>
+                    <span class="passport-value-large">{{ data.dynamic_data.total_units }}</span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="passport-card">
+                    <span class="passport-label">{{ _('Остаток на сегодня') }}</span>
+                    <span class="passport-value-large">{{ data.dynamic_data.total_remainders_count }}</span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="passport-card">
+                    <span class="passport-label">{{ _('Мес. до кадастра') }}</span>
+                    <span class="passport-value-large">{{ data.dynamic_data.months_to_cadastre or 'N/A' }}</span>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="passport-card">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <span class="passport-label">{{ _('Вид конструкции') }}</span>
+                            <span class="passport-value passport-value-view" data-field="construction_type">{{ data.static_data.construction_type or '...' }}</span>
+                            <input type="text" class="form-control passport-value-edit" id="construction_type" value="{{ data.static_data.construction_type or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <span class="passport-label">{{ _('Тип отопления') }}</span>
+                            <span class="passport-value passport-value-view" data-field="heating_type">{{ data.static_data.heating_type or '...' }}</span>
+                            <input type="text" class="form-control passport-value-edit" id="heating_type" value="{{ data.static_data.heating_type or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <span class="passport-label">{{ _('Вид отделки') }}</span>
+                            <span class="passport-value passport-value-view" data-field="finishing_type">{{ data.static_data.finishing_type or '...' }}</span>
+                            <input type="text" class="form-control passport-value-edit" id="finishing_type" value="{{ data.static_data.finishing_type or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <span class="passport-label">{{ _('Дата начала строительства') }}</span>
+                            <span class="passport-value passport-value-view" data-field="start_date">{{ data.static_data.start_date or '...' }}</span>
+                            <input type="date" class="form-control passport-value-edit" id="start_date" value="{{ data.static_data.start_date or '' }}">
+                        </div>
+                         <div class="col-md-12">
+                            <span class="passport-label">{{ _('Адрес (Интерактивная карта - ссылка)') }}</span>
+                            <span class="passport-value passport-value-view" data-field="address_link">
+                                {% if data.static_data.address_link %}
+                                <a href="{{ data.static_data.address_link }}" target="_blank">{{ data.static_data.address_link }}</a>
+                                {% else %}...{% endif %}
+                            </span>
+                            <input type="text" class="form-control passport-value-edit" id="address_link" value="{{ data.static_data.address_link or '' }}">
+                        </div>
+                        <div class="col-md-12">
+                            <span class="passport-label">{{ _('Текущий этап строительства') }}</span>
+                            <span class="passport-value passport-value-view" data-field="current_stage">{{ data.static_data.current_stage or '...' }}</span>
+                            <textarea class="form-control passport-value-edit" id="current_stage" rows="3">{{ data.static_data.current_stage or '' }}</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="passport-card">
+                    <h5 class="card-title mb-3">{{ _('Действующие скидки') }}</h5>
+                    <div class="table-responsive" style="max-height: 300px;">
+                        <table class="table table-sm table-striped discount-table">
+                            <thead>
+                                <tr>
+                                    <th>{{ _('Тип недв.') }}</th>
+                                    <th>{{ _('Тип оплаты') }}</th>
+                                    <th class="text-end">{{ _('МПП') }}</th>
+                                    <th class="text-end">{{ _('РОП') }}</th>
+                                    <th class="text-end">{{ _('КД') }}</th>
+                                    <th class="text-end">{{ _('Акция') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for d in data.dynamic_data.active_discounts %}
+                                <tr>
+                                    <td>{{ _(d.property_type) }}</td>
+                                    <td>{{ _(d.payment_method) }}</td>
+                                    <td class="text-end">{{ "%.1f"|format(d.mpp * 100) }}%</td>
+                                    <td class="text-end">{{ "%.1f"|format(d.rop * 100) }}%</td>
+                                    <td class="text-end">{{ "%.1f"|format(d.kd * 100) }}%</td>
+                                    <td class="text-end">{{ "%.1f"|format(d.action * 100) }}%</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="6" class="text-center">{{ _('Нет данных об активных скидках.') }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="passport-sidebar">
+        <div class="row g-4">
+            <div class="col-12">
+                <div class="passport-card">
+                    <h5 class="card-title mb-4">{{ _('Команда проекта') }}</h5>
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Руководитель проекта') }}</span>
+                        <span class="passport-value passport-value-view" data-field="project_manager">{{ data.static_data.project_manager or '...' }}</span>
+                        <input type="text" class="form-control passport-value-edit" id="project_manager" value="{{ data.static_data.project_manager or '' }}">
+                    </div>
+                     <div class="mb-3">
+                        <span class="passport-label">{{ _('Главный инженер проекта') }}</span>
+                        <span class="passport-value passport-value-view" data-field="chief_engineer">{{ data.static_data.chief_engineer or '...' }}</span>
+                        <input type="text" class="form-control passport-value-edit" id="chief_engineer" value="{{ data.static_data.chief_engineer or '' }}">
+                    </div>
+                    <div>
+                        <span class="passport-label">{{ _('Руководитель отдела продаж') }}</span>
+                        <span class="passport-value passport-value-view" data-field="sales_manager">{{ data.static_data.sales_manager or '...' }}</span>
+                        <input type="text" class="form-control passport-value-edit" id="sales_manager" value="{{ data.static_data.sales_manager or '' }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="passport-card">
+                    <h5 class="card-title mb-4">{{ _('Ключевые показатели') }}</h5>
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Средний темп продаж (за все время)') }}</span>
+                        <span class="passport-value">{{ "%.1f"|format(data.dynamic_data.all_time_sales_pace) }} {{ _('юнит/мес') }}</span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Прогноз завершения продаж (с коэф. 0.8)') }}</span>
+                        <span class="passport-value">{{ data.dynamic_data.forecast_date or 'N/A' }}</span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Самый частый вид оплаты') }}</span>
+                        {% if data.dynamic_data.top_payment_type %}
+                            <span class="passport-value">
+                                {{ data.dynamic_data.top_payment_type.name }}
+                                ({{ "%.1f"|format(data.dynamic_data.top_payment_type.percentage) }}%)
+                            </span>
+                        {% else %}
+                            <span class="passport-value">N/A</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="passport-label">{{ _('Полная сумма ожидаемых оплат') }}</span>
+                        <span class="passport-value text-success">{{ "{:,.0f}".format(data.dynamic_data.expected_payments) }} UZS</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="passport-card">
+                    <h5 class="card-title mb-3">{{ _('Остатки по типам') }}</h5>
+                    <ul class="list-group list-group-flush">
+                    {% for prop_type, metrics in data.dynamic_data.remainders_by_type.items() %}
+                        <li class="list-group-item bg-transparent px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="passport-label">{{ _(prop_type) }} ({{ metrics.count }} шт.)</span>
+                                <span class="passport-value">{{ "{:,.0f}".format(metrics.total_price) }} UZS</span>
+                            </div>
+                            <small class="text-success fw-bold">${{ "{:,.0f}".format(metrics.avg_price_sqm / 13050) }}/м²</small>
+                        </li>
+                    {% else %}
+                        <li class="list-group-item bg-transparent px-0 text-muted">{{ _('Нет остатков.') }}</li>
+                    {% endfor %} {# <-- ВОТ ИСПРАВЛЕНИЕ #}
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const container = document.getElementById('passport-form-container');
+    if (!container) return;
+
+    const editBtn = document.getElementById('edit-btn');
+    const saveBtn = document.getElementById('save-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+
+    // Поля, которые мы будем редактировать
+    const editableFields = [
+        'construction_type', 'address_link', 'heating_type',
+        'finishing_type', 'start_date', 'current_stage',
+        'project_manager', 'chief_engineer', 'sales_manager'
+    ];
+
+    // Исходные данные, загруженные со страницы
+    const initialData = JSON.parse('{{ static_data_json|safe }}' || '{}');
+
+    function toggleEditMode(isEditing) {
+        if (isEditing) {
+            container.classList.add('editing');
+            editBtn.style.display = 'none';
+            saveBtn.style.display = 'block';
+            cancelBtn.style.display = 'block';
+        } else {
+            container.classList.remove('editing');
+            editBtn.style.display = 'block';
+            saveBtn.style.display = 'none';
+            cancelBtn.style.display = 'none';
+        }
+    }
+
+    if (editBtn) {
+        editBtn.addEventListener('click', function () {
+            toggleEditMode(true);
+        });
+    }
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+            // Возвращаем исходные значения в инпуты
+            editableFields.forEach(fieldId => {
+                const input = document.getElementById(fieldId);
+                if (input) {
+                    input.value = initialData[fieldId] || '';
+                }
+            });
+            toggleEditMode(false);
+        });
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            const payload = {
+                complex_name: container.dataset.complexName
+            };
+
+            // Собираем данные из инпутов
+            editableFields.forEach(fieldId => {
+                const input = document.getElementById(fieldId);
+                if (input) {
+                    payload[fieldId] = input.value;
+                }
+            });
+
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> {{ _('Сохранение...') }}';
+
+            fetch('/api/v1/passport/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Обновляем "view" элементы и исходные данные
+                    editableFields.forEach(fieldId => {
+                        const input = document.getElementById(fieldId);
+                        const viewEl = document.querySelector(`.passport-value-view[data-field="${fieldId}"]`);
+
+                        if (input && viewEl) {
+                            const newValue = input.value;
+                            initialData[fieldId] = newValue; // Обновляем кеш
+
+                            if (fieldId === 'address_link') {
+                                viewEl.innerHTML = newValue ? `<a href="${newValue}" target="_blank">${newValue}</a>` : '...';
+                            } else {
+                                viewEl.textContent = newValue || '...';
+                            }
+                        }
+                    });
+                    toggleEditMode(false);
+                } else {
+                    alert('Ошибка сохранения: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Произошла сетевая ошибка.');
+            })
+            .finally(() => {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-save me-2"></i> {{ _('Сохранить') }}';
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

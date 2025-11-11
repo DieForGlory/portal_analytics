@@ -154,3 +154,48 @@ def map_mysql_key_to_russian_value(mysql_key: str) -> str:
     }
     # Возвращаем русское значение, если оно есть, или сам ключ
     return mapping.get(mysql_key, mysql_key)
+
+
+class ProjectPassport(db.Model):
+    """
+    Модель для хранения статических, редактируемых данных
+    для страницы "Паспорт проекта".
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'project_passports'
+
+    # Название ЖК является первичным ключом
+    complex_name = db.Column(db.String(255), primary_key=True)
+
+    # Редактируемые поля
+    construction_type = db.Column(db.String(500), nullable=True)
+    address_link = db.Column(db.String(1000), nullable=True)  # Для интерактивной карты
+    heating_type = db.Column(db.String(500), nullable=True)
+    finishing_type = db.Column(db.String(500), nullable=True)
+    start_date = db.Column(db.Date, nullable=True)
+    current_stage = db.Column(db.String(1000), nullable=True)
+    project_manager = db.Column(db.String(255), nullable=True)
+    chief_engineer = db.Column(db.String(255), nullable=True)
+    sales_manager = db.Column(db.String(255), nullable=True)
+
+    # Системные поля
+    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f'<ProjectPassport {self.complex_name}>'
+
+    def to_dict(self):
+        """Возвращает данные в виде словаря для API."""
+        return {
+            'complex_name': self.complex_name,
+            'construction_type': self.construction_type,
+            'address_link': self.address_link,
+            'heating_type': self.heating_type,
+            'finishing_type': self.finishing_type,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'current_stage': self.current_stage,
+            'project_manager': self.project_manager,
+            'chief_engineer': self.chief_engineer,
+            'sales_manager': self.sales_manager,
+        }
