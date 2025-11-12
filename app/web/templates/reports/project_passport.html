@@ -68,6 +68,18 @@
         font-size: 0.9rem;
         padding: 0.5rem;
     }
+    /* Стили для переключателя валют в заголовке */
+    #passport-controls .form-label {
+        font-size: 0.85rem;
+        color: var(--bs-secondary-color);
+        margin-bottom: 0;
+    }
+    #passport-controls .form-switch {
+        padding-left: 3.5em; /* Увеличиваем отступ, чтобы вместить лейбл UZS/USD */
+    }
+    #passport-controls .form-check-label {
+        margin-top: 2px; /* Выравниваем лейбл UZS/USD */
+    }
 </style>
 {% endblock %}
 
@@ -92,12 +104,23 @@
                 <i class="bi bi-save me-2"></i>{{ _('Сохранить') }}
             </button>
         {% endif %}
+
+        {# --- НАЧАЛО ИЗМЕНЕНИЯ: Переключатель валют --- #}
+        <div class="ms-4 text-center">
+            <label class="form-label">{{ _('Валюта') }}</label>
+            <div class="form-check form-switch fs-4">
+                <input class="form-check-input" type="checkbox" role="switch" id="currencyToggle">
+                <label class="form-check-label" for="currencyToggle" id="currencyLabel">UZS</label>
+            </div>
+        </div>
+        {# --- КОНЕЦ ИЗМЕНЕНИЯ --- #}
     </div>
 </div>
 
 <div class="passport-container" id="passport-form-container" data-complex-name="{{ data.complex_name }}">
 
     <div class="passport-main">
+        {# ... (остальная часть passport-main без изменений) ... #}
         <div class="row g-4">
             <div class="col-md-4">
                 <div class="passport-card">
@@ -178,6 +201,7 @@
                                 {% for d in data.dynamic_data.active_discounts %}
                                 <tr>
                                     <td>{{ _(d.property_type) }}</td>
+                                    {# --- ИСПРАВЛЕНИЕ ОШИБКИ ПЕРЕВОДА --- #}
                                     <td>
                                         {% if d.payment_method == '100% оплата' %}
                                             {{ _('100%% оплата') }}
@@ -185,6 +209,7 @@
                                             {{ _(d.payment_method) }}
                                         {% endif %}
                                     </td>
+                                    {# --- КОНЕЦ ИСПРАВЛЕНИЯ --- #}
                                     <td class="text-end">{{ "%.1f"|format(d.mpp * 100) }}%</td>
                                     <td class="text-end">{{ "%.1f"|format(d.rop * 100) }}%</td>
                                     <td class="text-end">{{ "%.1f"|format(d.kd * 100) }}%</td>
@@ -232,7 +257,7 @@
                         <span class="passport-value">{{ "%.1f"|format(data.dynamic_data.all_time_sales_pace) }} {{ _('юнит/мес') }}</span>
                     </div>
                     <div class="mb-3">
-                        <span class="passport-label">{{ _('Прогноз завершения продаж (с коэф. 0.8)') }}</span>
+                        <span class="passport-label">{{ _('Прогноз завершения продаж (с коэф. 1.4)') }}</span> {# <-- Обновлен лейбл #}
                         <span class="passport-value">{{ data.dynamic_data.forecast_date or 'N/A' }}</span>
                     </div>
                     <div class="mb-3">
@@ -248,7 +273,9 @@
                     </div>
                     <div>
                         <span class="passport-label">{{ _('Полная сумма ожидаемых оплат') }}</span>
-                        <span class="passport-value text-success">{{ "{:,.0f}".format(data.dynamic_data.expected_payments) }} UZS</span>
+                        {# --- НАЧАЛО ИЗМЕНЕНИЯ: Добавлены классы для конвертации --- #}
+                        <span class="passport-value text-success currency-value" data-uzs-value="{{ data.dynamic_data.expected_payments }}">{{ "{:,.0f}".format(data.dynamic_data.expected_payments) }} UZS</span>
+                        {# --- КОНЕЦ ИЗМЕНЕНИЯ --- #}
                     </div>
                 </div>
             </div>
@@ -261,13 +288,17 @@
                         <li class="list-group-item bg-transparent px-0 d-flex justify-content-between align-items-center">
                             <div>
                                 <span class="passport-label">{{ _(prop_type) }} ({{ metrics.count }} шт.)</span>
-                                <span class="passport-value">{{ "{:,.0f}".format(metrics.total_price) }} UZS</span>
+                                {# --- НАЧАЛО ИЗМЕНЕНИЯ: Добавлены классы для конвертации --- #}
+                                <span class="passport-value currency-value" data-uzs-value="{{ metrics.total_price }}">{{ "{:,.0f}".format(metrics.total_price) }} UZS</span>
+                                {# --- КОНЕЦ ИЗМЕНЕНИЯ --- #}
                             </div>
-                            <small class="text-success fw-bold">${{ "{:,.0f}".format(metrics.avg_price_sqm / 13050) }}/м²</small>
+                            {# --- НАЧАЛО ИЗМЕНЕНИЯ: Добавлены классы для конвертации (цена за м2) --- #}
+                            <small class="text-success fw-bold currency-value" data-uzs-value="{{ metrics.avg_price_sqm }}">{{ "{:,.0f}".format(metrics.avg_price_sqm) }} UZS/м²</small>
+                            {# --- КОНЕЦ ИЗМЕНЕНИЯ --- #}
                         </li>
                     {% else %}
                         <li class="list-group-item bg-transparent px-0 text-muted">{{ _('Нет остатков.') }}</li>
-                    {% endfor %} {# <-- ВОТ ИСПРАВЛЕНИЕ #}
+                    {% endfor %}
                     </ul>
                 </div>
             </div>
@@ -281,115 +312,153 @@
 {% block scripts %}
 {{ super() }}
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    const container = document.getElementById('passport-form-container');
-    if (!container) return;
+    // Передаем курс в JS
+    document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 13050 }}";
 
-    const editBtn = document.getElementById('edit-btn');
-    const saveBtn = document.getElementById('save-btn');
-    const cancelBtn = document.getElementById('cancel-btn');
+    // JS для переключателя валют
+    document.addEventListener('DOMContentLoaded', function () {
+        const container = document.getElementById('passport-form-container');
+        if (!container) return;
 
-    // Поля, которые мы будем редактировать
-    const editableFields = [
-        'construction_type', 'address_link', 'heating_type',
-        'finishing_type', 'start_date', 'current_stage',
-        'project_manager', 'chief_engineer', 'sales_manager'
-    ];
+        // --- ЛОГИКА ПЕРЕКЛЮЧАТЕЛЯ ВАЛЮТ ---
+        const usdRate = parseFloat(document.body.dataset.usdRate) || 13050;
+        const currencyToggle = document.getElementById('currencyToggle');
+        const currencyLabel = document.getElementById('currencyLabel');
 
-    // Исходные данные, загруженные со страницы
-    const initialData = JSON.parse('{{ static_data_json|safe }}' || '{}');
+        function updateCurrency() {
+            const isUsd = currencyToggle.checked;
 
-    function toggleEditMode(isEditing) {
-        if (isEditing) {
-            container.classList.add('editing');
-            editBtn.style.display = 'none';
-            saveBtn.style.display = 'block';
-            cancelBtn.style.display = 'block';
-        } else {
-            container.classList.remove('editing');
-            editBtn.style.display = 'block';
-            saveBtn.style.display = 'none';
-            cancelBtn.style.display = 'none';
-        }
-    }
+            if (currencyLabel) {
+                currencyLabel.textContent = isUsd ? 'USD' : 'UZS';
+            }
 
-    if (editBtn) {
-        editBtn.addEventListener('click', function () {
-            toggleEditMode(true);
-        });
-    }
+            document.querySelectorAll('.currency-value').forEach(el => {
+                const uzsValue = parseFloat(el.dataset.uzsValue);
+                if (isNaN(uzsValue)) return;
 
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', function () {
-            // Возвращаем исходные значения в инпуты
-            editableFields.forEach(fieldId => {
-                const input = document.getElementById(fieldId);
-                if (input) {
-                    input.value = initialData[fieldId] || '';
-                }
-            });
-            toggleEditMode(false);
-        });
-    }
+                let displayValue;
+                let originalText = el.textContent || "";
+                let suffix = originalText.includes("UZS/м²") ? " USD/м²" : (originalText.includes("UZS") ? " USD" : "");
 
-    if (saveBtn) {
-        saveBtn.addEventListener('click', function () {
-            const payload = {
-                complex_name: container.dataset.complexName
-            };
-
-            // Собираем данные из инпутов
-            editableFields.forEach(fieldId => {
-                const input = document.getElementById(fieldId);
-                if (input) {
-                    payload[fieldId] = input.value;
-                }
-            });
-
-            saveBtn.disabled = true;
-            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> {{ _('Сохранение...') }}';
-
-            fetch('/api/v1/passport/save', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Обновляем "view" элементы и исходные данные
-                    editableFields.forEach(fieldId => {
-                        const input = document.getElementById(fieldId);
-                        const viewEl = document.querySelector(`.passport-value-view[data-field="${fieldId}"]`);
-
-                        if (input && viewEl) {
-                            const newValue = input.value;
-                            initialData[fieldId] = newValue; // Обновляем кеш
-
-                            if (fieldId === 'address_link') {
-                                viewEl.innerHTML = newValue ? `<a href="${newValue}" target="_blank">${newValue}</a>` : '...';
-                            } else {
-                                viewEl.textContent = newValue || '...';
-                            }
-                        }
-                    });
-                    toggleEditMode(false);
+                if (isUsd) {
+                    displayValue = '$ ' + (uzsValue / usdRate).toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+                    if(suffix) displayValue = displayValue.replace(" USD", suffix);
                 } else {
-                    alert('Ошибка сохранения: ' + data.error);
+                    displayValue = uzsValue.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+                    if(suffix) displayValue += suffix.replace("USD", "UZS");
+                    else displayValue += " UZS";
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Произошла сетевая ошибка.');
-            })
-            .finally(() => {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = '<i class="bi bi-save me-2"></i> {{ _('Сохранить') }}';
+                el.textContent = displayValue;
             });
-        });
-    }
-});
+        }
+
+        if (currencyToggle) {
+            currencyToggle.addEventListener('change', updateCurrency);
+            // Инициализация при загрузке
+            updateCurrency();
+        }
+
+        // --- ЛОГИКА РЕДАКТИРОВАНИЯ ПАСПОРТА ---
+        const editBtn = document.getElementById('edit-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const cancelBtn = document.getElementById('cancel-btn');
+
+        const editableFields = [
+            'construction_type', 'address_link', 'heating_type',
+            'finishing_type', 'start_date', 'current_stage',
+            'project_manager', 'chief_engineer', 'sales_manager'
+        ];
+
+        const initialData = JSON.parse('{{ static_data_json|safe }}' || '{}');
+
+        function toggleEditMode(isEditing) {
+            if (isEditing) {
+                container.classList.add('editing');
+                editBtn.style.display = 'none';
+                saveBtn.style.display = 'block';
+                cancelBtn.style.display = 'block';
+            } else {
+                container.classList.remove('editing');
+                editBtn.style.display = 'block';
+                saveBtn.style.display = 'none';
+                cancelBtn.style.display = 'none';
+            }
+        }
+
+        if (editBtn) {
+            editBtn.addEventListener('click', function () {
+                toggleEditMode(true);
+            });
+        }
+
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', function () {
+                editableFields.forEach(fieldId => {
+                    const input = document.getElementById(fieldId);
+                    if (input) {
+                        input.value = initialData[fieldId] || '';
+                    }
+                });
+                toggleEditMode(false);
+            });
+        }
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', function () {
+                const payload = {
+                    complex_name: container.dataset.complexName
+                };
+
+                editableFields.forEach(fieldId => {
+                    const input = document.getElementById(fieldId);
+                    if (input) {
+                        payload[fieldId] = input.value;
+                    }
+                });
+
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> {{ _('Сохранение...') }}';
+
+                fetch('/api/v1/passport/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        editableFields.forEach(fieldId => {
+                            const input = document.getElementById(fieldId);
+                            const viewEl = document.querySelector(`.passport-value-view[data-field="${fieldId}"]`);
+
+                            if (input && viewEl) {
+                                const newValue = input.value;
+                                initialData[fieldId] = newValue;
+
+                                if (fieldId === 'address_link') {
+                                    viewEl.innerHTML = newValue ? `<a href="${newValue}" target="_blank">${newValue}</a>` : '...';
+                                } else {
+                                    viewEl.textContent = newValue || '...';
+                                }
+                            }
+                        });
+                        toggleEditMode(false);
+                    } else {
+                        alert('Ошибка сохранения: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Произошла сетевая ошибка.');
+                })
+                .finally(() => {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="bi bi-save me-2"></i> {{ _('Сохранить') }}';
+                });
+            });
+        }
+    });
 </script>
 {% endblock %}

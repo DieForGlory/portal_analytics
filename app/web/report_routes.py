@@ -282,12 +282,13 @@ def project_passport(complex_name):
     if not passport_full_data:
         flash(f"Проект с названием '{complex_name}' не найден.", "danger")
         return redirect(url_for('report.plan_fact_report'))
-
+    usd_rate = currency_service.get_current_effective_rate()
     return render_template(
         'reports/project_passport.html',
         title=f"Паспорт проекта: {complex_name}",
         data=passport_full_data,
-        static_data_json=json.dumps(passport_full_data.get('static_data', {}))  # Для JS
+        static_data_json=json.dumps(passport_full_data.get('static_data', {})) ,
+        usd_to_uzs_rate=usd_rate# Для JS
     )
 @report_bp.route('/currency-settings', methods=['GET', 'POST'])
 @login_required

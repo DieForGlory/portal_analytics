@@ -565,7 +565,7 @@ def get_project_passport_data(complex_name: str):
     # Прогноз даты завершения продаж
     forecast_date = None
     if all_time_pace > 0:
-        pace_with_coeff = all_time_pace * 0.8  # Понижающий коэффициент 20%
+        pace_with_coeff = all_time_pace * 1.4  # Понижающий коэффициент 20%
         if pace_with_coeff > 0:
             months_to_sell = total_remainders_count / pace_with_coeff
             forecast_date = date.today() + relativedelta(months=int(months_to_sell))
