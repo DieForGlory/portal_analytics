@@ -177,7 +177,9 @@ class ProjectPassport(db.Model):
     project_manager = db.Column(db.String(255), nullable=True)
     chief_engineer = db.Column(db.String(255), nullable=True)
     sales_manager = db.Column(db.String(255), nullable=True)
-
+    planned_sales_pace = db.Column(db.Float, nullable=True)
+    construction_stages = db.relationship('ProjectConstructionStage', backref='passport', lazy='dynamic',
+                                          cascade="all, delete-orphan", order_by='ProjectConstructionStage.start_date')
     # Системные поля
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
@@ -198,4 +200,42 @@ class ProjectPassport(db.Model):
             'project_manager': self.project_manager,
             'chief_engineer': self.chief_engineer,
             'sales_manager': self.sales_manager,
+            'planned_sales_pace': self.planned_sales_pace,
+        }
+
+
+class ProjectConstructionStage(db.Model):
+    """
+    Модель для хранения этапов строительства по каждому проекту.
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'project_construction_stages'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Внешний ключ, ссылающийся на 'project_passports.complex_name'
+    complex_name = db.Column(db.String(255), db.ForeignKey('project_passports.complex_name'), nullable=False,
+                             index=True)
+
+    # Редактируемые поля
+    stage_name = db.Column(db.String(500), nullable=False)
+    start_date = db.Column(db.Date, nullable=True)
+    planned_end_date = db.Column(db.Date, nullable=True)
+    actual_end_date = db.Column(db.Date, nullable=True)
+
+    # Системные поля
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f'<ProjectConstructionStage {self.id} for {self.complex_name}>'
+
+    def to_dict(self):
+        """Возвращает данные в виде словаря для API."""
+        return {
+            'id': self.id,
+            'complex_name': self.complex_name,
+            'stage_name': self.stage_name,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'planned_end_date': self.planned_end_date.isoformat() if self.planned_end_date else None,
+            'actual_end_date': self.actual_end_date.isoformat() if self.actual_end_date else None,
         }

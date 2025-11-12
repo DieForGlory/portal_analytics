@@ -364,10 +364,6 @@ def manager_performance_report():
         7: 'Июль', 8: 'Август', 9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'
     }
 
-    # --- Закрываем сессии ---
-    default_session.close()
-    planning_session.close()
-    # ---
 
     return render_template(
         'reports/manager_performance_overview.html',

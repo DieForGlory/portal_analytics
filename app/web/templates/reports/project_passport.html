@@ -2,85 +2,7 @@
 
 {% block styles %}
 {{ super() }}
-<style>
-    .passport-container {
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 1.5rem;
-    }
-    .passport-section {
-        grid-column: span 12;
-    }
-    .passport-main {
-        grid-column: span 12;
-    }
-    .passport-sidebar {
-        grid-column: span 12;
-    }
-
-    @media (min-width: 992px) {
-        .passport-main {
-            grid-column: span 8;
-        }
-        .passport-sidebar {
-            grid-column: span 4;
-        }
-    }
-
-    .passport-card {
-        background-color: var(--bs-tertiary-bg);
-        border: 1px solid var(--bs-border-color-translucent);
-        border-radius: .75rem;
-        padding: 1.5rem;
-        height: 100%;
-    }
-    .passport-label {
-        font-size: 0.85rem;
-        color: var(--bs-secondary-color);
-        margin-bottom: 0.25rem;
-        display: block;
-    }
-    .passport-value {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: var(--bs-body-color);
-        line-height: 1.2;
-    }
-    .passport-value-large {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: var(--bs-primary);
-    }
-    .passport-value-edit {
-        display: none; /* Скрыто по умолчанию */
-    }
-    .editing .passport-value-view {
-        display: none;
-    }
-    .editing .passport-value-edit {
-        display: block;
-    }
-    .discount-table th {
-        font-size: 0.8rem;
-        padding: 0.5rem;
-    }
-    .discount-table td {
-        font-size: 0.9rem;
-        padding: 0.5rem;
-    }
-    /* Стили для переключателя валют в заголовке */
-    #passport-controls .form-label {
-        font-size: 0.85rem;
-        color: var(--bs-secondary-color);
-        margin-bottom: 0;
-    }
-    #passport-controls .form-switch {
-        padding-left: 3.5em; /* Увеличиваем отступ, чтобы вместить лейбл UZS/USD */
-    }
-    #passport-controls .form-check-label {
-        margin-top: 2px; /* Выравниваем лейбл UZS/USD */
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/project_passport_style.css') }}">
 {% endblock %}
 
 
@@ -105,7 +27,6 @@
             </button>
         {% endif %}
 
-        {# --- НАЧАЛО ИЗМЕНЕНИЯ: Переключатель валют --- #}
         <div class="ms-4 text-center">
             <label class="form-label">{{ _('Валюта') }}</label>
             <div class="form-check form-switch fs-4">
@@ -113,14 +34,13 @@
                 <label class="form-check-label" for="currencyToggle" id="currencyLabel">UZS</label>
             </div>
         </div>
-        {# --- КОНЕЦ ИЗМЕНЕНИЯ --- #}
     </div>
 </div>
 
-<div class="passport-container" id="passport-form-container" data-complex-name="{{ data.complex_name }}">
+<div class="row g-4" id="passport-form-container" data-complex-name="{{ data.complex_name }}">
 
-    <div class="passport-main">
-        {# ... (остальная часть passport-main без изменений) ... #}
+    <div class="col-lg-8 d-flex flex-column gap-4">
+
         <div class="row g-4">
             <div class="col-md-4">
                 <div class="passport-card">
@@ -140,68 +60,69 @@
                     <span class="passport-value-large">{{ data.dynamic_data.months_to_cadastre or 'N/A' }}</span>
                 </div>
             </div>
+        </div>
 
-            <div class="col-12">
-                <div class="passport-card">
-                    <div class="row g-4">
-                        <div class="col-md-6">
-                            <span class="passport-label">{{ _('Вид конструкции') }}</span>
-                            <span class="passport-value passport-value-view" data-field="construction_type">{{ data.static_data.construction_type or '...' }}</span>
-                            <input type="text" class="form-control passport-value-edit" id="construction_type" value="{{ data.static_data.construction_type or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <span class="passport-label">{{ _('Тип отопления') }}</span>
-                            <span class="passport-value passport-value-view" data-field="heating_type">{{ data.static_data.heating_type or '...' }}</span>
-                            <input type="text" class="form-control passport-value-edit" id="heating_type" value="{{ data.static_data.heating_type or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <span class="passport-label">{{ _('Вид отделки') }}</span>
-                            <span class="passport-value passport-value-view" data-field="finishing_type">{{ data.static_data.finishing_type or '...' }}</span>
-                            <input type="text" class="form-control passport-value-edit" id="finishing_type" value="{{ data.static_data.finishing_type or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <span class="passport-label">{{ _('Дата начала строительства') }}</span>
-                            <span class="passport-value passport-value-view" data-field="start_date">{{ data.static_data.start_date or '...' }}</span>
-                            <input type="date" class="form-control passport-value-edit" id="start_date" value="{{ data.static_data.start_date or '' }}">
-                        </div>
-                         <div class="col-md-12">
-                            <span class="passport-label">{{ _('Адрес (Интерактивная карта - ссылка)') }}</span>
-                            <span class="passport-value passport-value-view" data-field="address_link">
-                                {% if data.static_data.address_link %}
-                                <a href="{{ data.static_data.address_link }}" target="_blank">{{ data.static_data.address_link }}</a>
-                                {% else %}...{% endif %}
-                            </span>
-                            <input type="text" class="form-control passport-value-edit" id="address_link" value="{{ data.static_data.address_link or '' }}">
-                        </div>
-                        <div class="col-md-12">
-                            <span class="passport-label">{{ _('Текущий этап строительства') }}</span>
-                            <span class="passport-value passport-value-view" data-field="current_stage">{{ data.static_data.current_stage or '...' }}</span>
-                            <textarea class="form-control passport-value-edit" id="current_stage" rows="3">{{ data.static_data.current_stage or '' }}</textarea>
-                        </div>
-                    </div>
+        <div class="passport-card">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <span class="passport-label">{{ _('Вид конструкции') }}</span>
+                    <span class="passport-value passport-value-view" data-field="construction_type">{{ data.static_data.construction_type or '...' }}</span>
+                    <input type="text" class="form-control passport-value-edit" id="construction_type" value="{{ data.static_data.construction_type or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <span class="passport-label">{{ _('Тип отопления') }}</span>
+                    <span class="passport-value passport-value-view" data-field="heating_type">{{ data.static_data.heating_type or '...' }}</span>
+                    <input type="text" class="form-control passport-value-edit" id="heating_type" value="{{ data.static_data.heating_type or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <span class="passport-label">{{ _('Вид отделки') }}</span>
+                    <span class="passport-value passport-value-view" data-field="finishing_type">{{ data.static_data.finishing_type or '...' }}</span>
+                    <input type="text" class="form-control passport-value-edit" id="finishing_type" value="{{ data.static_data.finishing_type or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <span class="passport-label">{{ _('Дата начала строительства') }}</span>
+                    <span class="passport-value passport-value-view" data-field="start_date">{{ data.static_data.start_date or '...' }}</span>
+                    <input type="date" class="form-control passport-value-edit" id="start_date" value="{{ data.static_data.start_date or '' }}">
+                </div>
+                 <div class="col-md-12">
+                    <span class="passport-label">{{ _('Адрес (Интерактивная карта - ссылка)') }}</span>
+                    <span class="passport-value passport-value-view" data-field="address_link">
+                        {% if data.static_data.address_link %}
+                        <a href="{{ data.static_data.address_link }}" target="_blank">{{ data.static_data.address_link }}</a>
+                        {% else %}...{% endif %}
+                    </span>
+                    <input type="text" class="form-control passport-value-edit" id="address_link" value="{{ data.static_data.address_link or '' }}">
+                </div>
+                <div class="col-md-12">
+                    <span class="passport-label">{{ _('Текущий этап строительства') }}</span>
+                    <span class="passport-value passport-value-view" data-field="current_stage">{{ data.static_data.current_stage or '...' }}</span>
+                    <textarea class="form-control passport-value-edit" id="current_stage" rows="3">{{ data.static_data.current_stage or '' }}</textarea>
                 </div>
             </div>
+        </div>
 
-            <div class="col-12">
-                <div class="passport-card">
-                    <h5 class="card-title mb-3">{{ _('Действующие скидки') }}</h5>
-                    <div class="table-responsive" style="max-height: 300px;">
-                        <table class="table table-sm table-striped discount-table">
-                            <thead>
-                                <tr>
-                                    <th>{{ _('Тип недв.') }}</th>
-                                    <th>{{ _('Тип оплаты') }}</th>
-                                    <th class="text-end">{{ _('МПП') }}</th>
-                                    <th class="text-end">{{ _('РОП') }}</th>
-                                    <th class="text-end">{{ _('КД') }}</th>
-                                    <th class="text-end">{{ _('Акция') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for d in data.dynamic_data.active_discounts %}
+        <div class="passport-card">
+            <h5 class="card-title mb-3">{{ _('Действующие скидки') }}</h5>
+            <div class="table-responsive" style="max-height: 300px;">
+                <table class="table table-sm table-striped discount-table">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Тип недв.') }}</th>
+                            <th>{{ _('Тип оплаты') }}</th>
+                            <th class="text-end">{{ _('МПП') }}</th>
+                            <th class="text-end">{{ _('РОП') }}</th>
+                            <th class="text-end">{{ _('КД') }}</th>
+                            <th class="text-end">{{ _('Акция') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set has_visible_discount = false %}
+                        {% for d in data.dynamic_data.active_discounts %}
+                            {% set has_discount = (d.mpp or 0) > 0 or (d.rop or 0) > 0 or (d.kd or 0) > 0 %}
+                            {% if has_discount %}
+                                {% set has_visible_discount = true %}
                                 <tr>
                                     <td>{{ _(d.property_type) }}</td>
-                                    {# --- ИСПРАВЛЕНИЕ ОШИБКИ ПЕРЕВОДА --- #}
                                     <td>
                                         {% if d.payment_method == '100% оплата' %}
                                             {{ _('100%% оплата') }}
@@ -209,26 +130,177 @@
                                             {{ _(d.payment_method) }}
                                         {% endif %}
                                     </td>
-                                    {# --- КОНЕЦ ИСПРАВЛЕНИЯ --- #}
-                                    <td class="text-end">{{ "%.1f"|format(d.mpp * 100) }}%</td>
-                                    <td class="text-end">{{ "%.1f"|format(d.rop * 100) }}%</td>
-                                    <td class="text-end">{{ "%.1f"|format(d.kd * 100) }}%</td>
-                                    <td class="text-end">{{ "%.1f"|format(d.action * 100) }}%</td>
+                                    <td class="text-end">{% if (d.mpp or 0) > 0 %}{{ "%.1f"|format(d.mpp * 100) }}%{% else %}—{% endif %}</td>
+                                    <td class="text-end">{% if (d.rop or 0) > 0 %}{{ "%.1f"|format(d.rop * 100) }}%{% else %}—{% endif %}</td>
+                                    <td class="text-end">{% if (d.kd or 0) > 0 %}{{ "%.1f"|format(d.kd * 100) }}%{% else %}—{% endif %}</td>
+                                    <td class="text-end">{% if (d.action or 0) > 0 %}{{ "%.1f"|format(d.action * 100) }}%{% else %}—{% endif %}</td>
                                 </tr>
-                                {% else %}
-                                <tr><td colspan="6" class="text-center">{{ _('Нет данных об активных скидках.') }}</td></tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                            {% endif %}
+                        {% endfor %}
+                        {% if not has_visible_discount %}
+                            <tr><td colspan="6" class="text-center">{{ _('Нет данных об активных скидках.') }}</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="passport-card">
+            <h5 class="card-title mb-4">{{ _('Показатели План-Факт') }}</h5>
+
+            {% set lpf = data.dynamic_data.latest_plan_fact_data %}
+            {% if lpf %}
+                <h6 class="text-muted">{{ _('Последний отчет') }} ({{ lpf.period }})</h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="remainder-item">
+                            <span class="passport-label">{{ _('Продажи, шт.') }}</span>
+                            <span class="passport-value">{{ "{:,.0f}".format(lpf.fact_units) }} / <small class="text-muted">{{ "{:,.0f}".format(lpf.plan_units) }}</small></span>
+                            {% set dev = lpf.fact_units - lpf.plan_units %}
+                            <span class="passport-label mt-2 {% if dev >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ _('Отклонение') }}: {{ "{:,.0f}".format(dev) }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="remainder-item">
+                            <span class="passport-label">{{ _('Контрактация') }}</span>
+                            <span class="passport-value">
+                                <span class="currency-value" data-uzs-value="{{ lpf.fact_volume }}">{{ "{:,.0f}".format(lpf.fact_volume) }} UZS</span> /
+                                <small class="text-muted currency-value" data-uzs-value="{{ lpf.plan_volume }}">{{ "{:,.0f}".format(lpf.plan_volume) }} UZS</small>
+                            </span>
+                            {% set dev = lpf.fact_volume - lpf.plan_volume %}
+                            <span class="passport-label mt-2 {% if dev >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ _('Отклонение') }}: <span class="currency-value" data-uzs-value="{{ dev }}">{{ "{:,.0f}".format(dev) }} UZS</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="remainder-item">
+                            <span class="passport-label">{{ _('Поступления') }}</span>
+                            <span class="passport-value">
+                                <span class="currency-value" data-uzs-value="{{ lpf.fact_income }}">{{ "{:,.0f}".format(lpf.fact_income) }} UZS</span> /
+                                <small class="text-muted currency-value" data-uzs-value="{{ lpf.plan_income }}">{{ "{:,.0f}".format(lpf.plan_income) }} UZS</small>
+                            </span>
+                            {% set dev = lpf.fact_income - lpf.plan_income %}
+                            <span class="passport-label mt-2 {% if dev >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ _('Отклонение') }}: <span class="currency-value" data-uzs-value="{{ dev }}">{{ "{:,.0f}".format(dev) }} UZS</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-secondary">{{ _('Данные по План-Факту для этого проекта отсутствуют.') }}</div>
+            {% endif %}
+
+            <hr>
+
+            {% set td = data.dynamic_data.total_deviation_data %}
+            <h6 class="text-muted">{{ _('Суммарное отклонение (за все время)') }}</h6>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="passport-card">
+                        <span class="passport-label">{{ _('Продажи, шт.') }}</span>
+                        {% set dev = td.fact_units - td.plan_units %}
+                        <span class="passport-value-large {% if dev >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(dev) }}</span>
+                        <small class="text-muted d-block">Факт: {{ "{:,.0f}".format(td.fact_units) }} / План: {{ "{:,.0f}".format(td.plan_units) }}</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="passport-card">
+                        <span class="passport-label">{{ _('Контрактация') }}</span>
+                        {% set dev = td.fact_volume - td.plan_volume %}
+                        <span class="passport-value-large {% if dev >= 0 %}text-success{% else %}text-danger{% endif %} currency-value" data-uzs-value="{{ dev }}">{{ "{:,.0f}".format(dev) }}</span>
+                        <small class="text-muted d-block currency-value" data-uzs-value="{{ td.fact_volume }}">Факт: {{ "{:,.0f}".format(td.fact_volume) }}</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="passport-card">
+                        <span class="passport-label">{{ _('Поступления') }}</span>
+                        {% set dev = td.fact_income - td.plan_income %}
+                        <span class="passport-value-large {% if dev >= 0 %}text-success{% else %}text-danger{% endif %} currency-value" data-uzs-value="{{ dev }}">{{ "{:,.0f}".format(dev) }}</span>
+                        <small class="text-muted d-block currency-value" data-uzs-value="{{ td.fact_income }}">Факт: {{ "{:,.0f}".format(td.fact_income) }}</small>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <div class="passport-sidebar">
-        <div class="row g-4">
-            <div class="col-12">
+        <div class="passport-card">
+            <h5 class="card-title mb-3">{{ _('Анализ коммерческой недвижимости') }}</h5>
+
+            {% set comm = data.dynamic_data.commercial_analysis %}
+            {% if comm and (comm.floor_1.count > 0 or comm.floor_m1.count > 0) %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Показатель') }}</th>
+                            <th class="text-end">{{ _('Этаж -1 (Паркинг)') }}</th>
+                            <th class="text-end">{{ _('Этаж 1') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{{ _('Кол-во остатков, шт.') }}</td>
+                            <td class="text-end fs-5 fw-bold">{{ comm.floor_m1.count or 0 }}</td>
+                            <td class="text-end fs-5 fw-bold">{{ comm.floor_1.count or 0 }}</td>
+                        </tr>
+                        <tr>
+                            <td>{{ _('Сред. площадь, м²') }}</td>
+                            <td class="text-end">{{ "%.1f".format(comm.floor_m1.avg_area or 0) }}</td>
+                            <td class="text-end">{{ "%.1f".format(comm.floor_1.avg_area or 0) }}</td>
+                        </tr>
+                        <tr>
+                            <td>{{ _('Сред. цена дна, UZS/м²') }}</td>
+                            <td class="text-end text-success fw-bold currency-value" data-uzs-value="{{ comm.floor_m1.avg_price_sqm or 0 }}">{{ "{:,.0f}".format(comm.floor_m1.avg_price_sqm or 0) }} UZS</td>
+                            <td class="text-end text-success fw-bold currency-value" data-uzs-value="{{ comm.floor_1.avg_price_sqm or 0 }}">{{ "{:,.0f}".format(comm.floor_1.avg_price_sqm or 0) }} UZS</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-secondary">{{ _('Данные для анализа коммерции не загружены.') }}</div>
+            {% endif %}
+        </div>
+
+        <div class="passport-card">
+            <h5 class="card-title mb-3">{{ _('Темпы строительства') }}</h5>
+            <div class="table-responsive">
+                <table class="table" id="construction-stages-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">{{ _('Название этапа') }}</th>
+                            <th style="width: 20%;">{{ _('Дата начала') }}</th>
+                            <th style="width: 20%;">{{ _('План. завершение') }}</th>
+                            <th style="width: 20%;">{{ _('Факт. завершение') }}</th>
+                            <th style="width: 10%;" class="passport-value-edit">{{ _('Действия') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stages-tbody">
+                        {% for stage in data.static_data.construction_stages %}
+                        <tr data-stage-id="{{ stage.id }}">
+                            <td><span class="passport-value-view">{{ stage.stage_name }}</span><input type="text" class="form-control passport-value-edit stage-name-input" value="{{ stage.stage_name }}"></td>
+                            <td><span class="passport-value-view">{{ stage.start_date or '...' }}</span><input type="date" class="form-control passport-value-edit stage-start-date-input" value="{{ stage.start_date or '' }}"></td>
+                            <td><span class="passport-value-view">{{ stage.planned_end_date or '...' }}</span><input type="date" class="form-control passport-value-edit stage-planned-end-date-input" value="{{ stage.planned_end_date or '' }}"></td>
+                            <td><span class="passport-value-view">{{ stage.actual_end_date or '...' }}</span><input type="date" class="form-control passport-value-edit stage-actual-end-date-input" value="{{ stage.actual_end_date or '' }}"></td>
+                            <td class="passport-value-edit"><button type="button" class="btn btn-sm btn-success save-stage-btn" data-id="{{ stage.id }}"><i class="bi bi-check-lg"></i></button><button type="button" class="btn btn-sm btn-danger delete-stage-btn" data-id="{{ stage.id }}"><i class="bi bi-trash"></i></button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <form id="add-stage-form" class="passport-value-edit mt-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-5"><label class="form-label small">{{ _('Название нового этапа') }}</label><input type="text" id="new-stage-name" class="form-control" required></div>
+                    <div class="col-md-3"><label class="form-label small">{{ _('Дата начала') }}</label><input type="date" id="new-stage-start-date" class="form-control"></div>
+                    <div class="col-md-3"><label class="form-label small">{{ _('План. завершение') }}</label><input type="date" id="new-stage-planned-end-date" class="form-control"></div>
+                    <div class="col-md-1"><button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg"></i></button></div>
+                </div>
+            </form>
+        </div>
+
+    </div> <div class="col-lg-4">
+        <div class="row g-4"> <div class="col-12">
                 <div class="passport-card">
                     <h5 class="card-title mb-4">{{ _('Команда проекта') }}</h5>
                     <div class="mb-3">
@@ -252,213 +324,128 @@
             <div class="col-12">
                 <div class="passport-card">
                     <h5 class="card-title mb-4">{{ _('Ключевые показатели') }}</h5>
+
                     <div class="mb-3">
                         <span class="passport-label">{{ _('Средний темп продаж (за все время)') }}</span>
                         <span class="passport-value">{{ "%.1f"|format(data.dynamic_data.all_time_sales_pace) }} {{ _('юнит/мес') }}</span>
                     </div>
+
                     <div class="mb-3">
-                        <span class="passport-label">{{ _('Прогноз завершения продаж (с коэф. 1.4)') }}</span> {# <-- Обновлен лейбл #}
-                        <span class="passport-value">{{ data.dynamic_data.forecast_date or 'N/A' }}</span>
+                        <span class="passport-label">{{ _('Плановые средние темпы продаж (юнит/мес)') }}</span>
+                        <span class="passport-value passport-value-view" data-field="planned_sales_pace">{{ data.static_data.planned_sales_pace or '...' }}</span>
+                        <input type="number" step="0.1" class="form-control passport-value-edit" id="planned_sales_pace" value="{{ data.static_data.planned_sales_pace or '' }}">
                     </div>
+
                     <div class="mb-3">
-                        <span class="passport-label">{{ _('Самый частый вид оплаты') }}</span>
-                        {% if data.dynamic_data.top_payment_type %}
-                            <span class="passport-value">
-                                {{ data.dynamic_data.top_payment_type.name }}
-                                ({{ "%.1f"|format(data.dynamic_data.top_payment_type.percentage) }}%)
-                            </span>
-                        {% else %}
-                            <span class="passport-value">N/A</span>
-                        {% endif %}
+                        <span class="passport-label">{{ _('Целевой темп продаж (до кадастра)') }}</span>
+                        <span class="passport-value text-info">
+                            {% if data.dynamic_data.target_sales_pace is not none %}
+                                {{ "%.1f"|format(data.dynamic_data.target_sales_pace) }} {{ _('юнит/мес') }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </span>
                     </div>
+
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Средняя квадратура остатков (Квартиры)') }}</span>
+                        <span class="passport-value">
+                            {% if data.dynamic_data.avg_area_flats and data.dynamic_data.avg_area_flats > 0 %}
+                                {{ "%.1f"|format(data.dynamic_data.avg_area_flats) }} м²
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </span>
+                    </div>
+
                     <div>
                         <span class="passport-label">{{ _('Полная сумма ожидаемых оплат') }}</span>
-                        {# --- НАЧАЛО ИЗМЕНЕНИЯ: Добавлены классы для конвертации --- #}
                         <span class="passport-value text-success currency-value" data-uzs-value="{{ data.dynamic_data.expected_payments }}">{{ "{:,.0f}".format(data.dynamic_data.expected_payments) }} UZS</span>
-                        {# --- КОНЕЦ ИЗМЕНЕНИЯ --- #}
                     </div>
                 </div>
             </div>
 
             <div class="col-12">
                 <div class="passport-card">
-                    <h5 class="card-title mb-3">{{ _('Остатки по типам') }}</h5>
-                    <ul class="list-group list-group-flush">
-                    {% for prop_type, metrics in data.dynamic_data.remainders_by_type.items() %}
-                        <li class="list-group-item bg-transparent px-0 d-flex justify-content-between align-items-center">
-                            <div>
-                                <span class="passport-label">{{ _(prop_type) }} ({{ metrics.count }} шт.)</span>
-                                {# --- НАЧАЛО ИЗМЕНЕНИЯ: Добавлены классы для конвертации --- #}
-                                <span class="passport-value currency-value" data-uzs-value="{{ metrics.total_price }}">{{ "{:,.0f}".format(metrics.total_price) }} UZS</span>
-                                {# --- КОНЕЦ ИЗМЕНЕНИЯ --- #}
-                            </div>
-                            {# --- НАЧАЛО ИЗМЕНЕНИЯ: Добавлены классы для конвертации (цена за м2) --- #}
-                            <small class="text-success fw-bold currency-value" data-uzs-value="{{ metrics.avg_price_sqm }}">{{ "{:,.0f}".format(metrics.avg_price_sqm) }} UZS/м²</small>
-                            {# --- КОНЕЦ ИЗМЕНЕНИЯ --- #}
-                        </li>
+                    <h5 class="card-title mb-3">{{ _('Виды оплаты') }}</h5>
+                    {% set payments = data.dynamic_data.payment_distribution %}
+                    {% if payments and payments.data and (payments.data | sum > 0) %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                {% set total_payments = payments.data | sum %}
+                                {% for i in range(payments.labels | length) %}
+                                <tr>
+                                    <td>{{ payments.labels[i] or _('Не указано') }}</td>
+                                    <td class="text-end fw-bold">{{ payments.data[i] }}</td>
+                                    <td class="text-end text-muted" style="width: 25%;">{{ "%.1f"|format(payments.data[i] * 100 / total_payments) }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                     {% else %}
-                        <li class="list-group-item bg-transparent px-0 text-muted">{{ _('Нет остатков.') }}</li>
-                    {% endfor %}
-                    </ul>
+                    <div class="alert alert-secondary">{{ _('Нет данных о распределении платежей.') }}</div>
+                    {% endif %}
                 </div>
             </div>
 
-        </div>
-    </div>
-</div>
+            <div class="col-12">
+                <div class="passport-card">
+                    <h5 class="card-title mb-3">{{ _('Остатки по типам') }}</h5>
 
-{% endblock %}
+                    {% set icons = {
+                        'Квартира': 'bi-buildings',
+                        'Коммерческое помещение': 'bi-shop',
+                        'Парковка': 'bi-p-circle',
+                        'Кладовое помещение': 'bi-archive-fill'
+                    } %}
+                    {% set colors = {
+                        'Квартира': 'text-primary',
+                        'Коммерческое помещение': 'text-success',
+                        'Парковка': 'text-warning',
+                        'Кладовое помещение': 'text-info'
+                    } %}
+
+                    <div class="d-flex flex-column gap-3">
+                    {% for prop_type, metrics in data.dynamic_data.remainders_by_type.items() %}
+                        {% set icon_class = icons.get(prop_type, 'bi-building') %}
+                        {% set color_class = colors.get(prop_type, 'text-muted') %}
+
+                        <div class="remainder-item">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi {{ icon_class }} {{ color_class }} fs-2 me-3" style="width: 32px;"></i>
+                                <div>
+                                    <span class="passport-label">{{ _(prop_type) }} ({{ metrics.count }} {{_('шт.')}})</span>
+                                    <span class="passport-value currency-value" data-uzs-value="{{ metrics.total_price }}">{{ "{:,.0f}".format(metrics.total_price) }} UZS</span>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-baseline" style="padding-left: 56px;">
+                                <small class_alias="text-muted">{{_('Сред. цена дна')}}:</small>
+                                <small class="fw-bold currency-value {{ color_class }}" data-uzs-value="{{ metrics.avg_price_sqm }}">{{ "{:,.0f}".format(metrics.avg_price_sqm) }} UZS/м²</small>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-secondary text-center">{{ _('Нет остатков.') }}</div>
+                    {% endfor %}
+                    </div>
+                </div>
+            </div>
+            </div>
+    </div> </div> {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
-    // Передаем курс в JS
     document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 13050 }}";
-
-    // JS для переключателя валют
-    document.addEventListener('DOMContentLoaded', function () {
-        const container = document.getElementById('passport-form-container');
-        if (!container) return;
-
-        // --- ЛОГИКА ПЕРЕКЛЮЧАТЕЛЯ ВАЛЮТ ---
-        const usdRate = parseFloat(document.body.dataset.usdRate) || 13050;
-        const currencyToggle = document.getElementById('currencyToggle');
-        const currencyLabel = document.getElementById('currencyLabel');
-
-        function updateCurrency() {
-            const isUsd = currencyToggle.checked;
-
-            if (currencyLabel) {
-                currencyLabel.textContent = isUsd ? 'USD' : 'UZS';
-            }
-
-            document.querySelectorAll('.currency-value').forEach(el => {
-                const uzsValue = parseFloat(el.dataset.uzsValue);
-                if (isNaN(uzsValue)) return;
-
-                let displayValue;
-                let originalText = el.textContent || "";
-                let suffix = originalText.includes("UZS/м²") ? " USD/м²" : (originalText.includes("UZS") ? " USD" : "");
-
-                if (isUsd) {
-                    displayValue = '$ ' + (uzsValue / usdRate).toLocaleString('ru-RU', { maximumFractionDigits: 0 });
-                    if(suffix) displayValue = displayValue.replace(" USD", suffix);
-                } else {
-                    displayValue = uzsValue.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
-                    if(suffix) displayValue += suffix.replace("USD", "UZS");
-                    else displayValue += " UZS";
-                }
-                el.textContent = displayValue;
-            });
-        }
-
-        if (currencyToggle) {
-            currencyToggle.addEventListener('change', updateCurrency);
-            // Инициализация при загрузке
-            updateCurrency();
-        }
-
-        // --- ЛОГИКА РЕДАКТИРОВАНИЯ ПАСПОРТА ---
-        const editBtn = document.getElementById('edit-btn');
-        const saveBtn = document.getElementById('save-btn');
-        const cancelBtn = document.getElementById('cancel-btn');
-
-        const editableFields = [
-            'construction_type', 'address_link', 'heating_type',
-            'finishing_type', 'start_date', 'current_stage',
-            'project_manager', 'chief_engineer', 'sales_manager'
-        ];
-
-        const initialData = JSON.parse('{{ static_data_json|safe }}' || '{}');
-
-        function toggleEditMode(isEditing) {
-            if (isEditing) {
-                container.classList.add('editing');
-                editBtn.style.display = 'none';
-                saveBtn.style.display = 'block';
-                cancelBtn.style.display = 'block';
-            } else {
-                container.classList.remove('editing');
-                editBtn.style.display = 'block';
-                saveBtn.style.display = 'none';
-                cancelBtn.style.display = 'none';
-            }
-        }
-
-        if (editBtn) {
-            editBtn.addEventListener('click', function () {
-                toggleEditMode(true);
-            });
-        }
-
-        if (cancelBtn) {
-            cancelBtn.addEventListener('click', function () {
-                editableFields.forEach(fieldId => {
-                    const input = document.getElementById(fieldId);
-                    if (input) {
-                        input.value = initialData[fieldId] || '';
-                    }
-                });
-                toggleEditMode(false);
-            });
-        }
-
-        if (saveBtn) {
-            saveBtn.addEventListener('click', function () {
-                const payload = {
-                    complex_name: container.dataset.complexName
-                };
-
-                editableFields.forEach(fieldId => {
-                    const input = document.getElementById(fieldId);
-                    if (input) {
-                        payload[fieldId] = input.value;
-                    }
-                });
-
-                saveBtn.disabled = true;
-                saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> {{ _('Сохранение...') }}';
-
-                fetch('/api/v1/passport/save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        editableFields.forEach(fieldId => {
-                            const input = document.getElementById(fieldId);
-                            const viewEl = document.querySelector(`.passport-value-view[data-field="${fieldId}"]`);
-
-                            if (input && viewEl) {
-                                const newValue = input.value;
-                                initialData[fieldId] = newValue;
-
-                                if (fieldId === 'address_link') {
-                                    viewEl.innerHTML = newValue ? `<a href="${newValue}" target="_blank">${newValue}</a>` : '...';
-                                } else {
-                                    viewEl.textContent = newValue || '...';
-                                }
-                            }
-                        });
-                        toggleEditMode(false);
-                    } else {
-                        alert('Ошибка сохранения: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Произошла сетевая ошибка.');
-                })
-                .finally(() => {
-                    saveBtn.disabled = false;
-                    saveBtn.innerHTML = '<i class="bi bi-save me-2"></i> {{ _('Сохранить') }}';
-                });
-            });
-        }
-    });
+    // Мы используем 'static_data_json', который уже определен в сервисе.
+    // 'data.static_data' содержит и 'planned_sales_pace' и 'construction_stages'
+    window.passportInitialData = JSON.parse('{{ data.static_data | tojson | safe }}' || '{}');
+    window.passportTranslations = {
+        saving: "{{ _('Сохранение...') }}",
+        save: "{{ _('Сохранить') }}",
+        confirmDelete: "{{ _('Вы уверены, что хотите удалить этот этап?') }}"
+    };
 </script>
+<script src="{{ url_for('static', filename='js/project_passport_script.js') }}" defer></script>
 {% endblock %}

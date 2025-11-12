@@ -12,6 +12,7 @@ from .core.config import DevelopmentConfig
 from .core.extensions import db
 from .core.db_utils import get_default_session
 from decimal import Decimal # <-- УБЕДИТЕСЬ, ЧТО ЭТОТ ИМПОРТ ЕСТЬ
+from sqlalchemy.orm import joinedload
 
 # 1. Инициализация расширений
 login_manager = LoginManager()
@@ -106,7 +107,9 @@ def create_app(config_class=DevelopmentConfig):
         @login_manager.user_loader
         def load_user(user_id):
             default_session = get_default_session()  # <--- ДОБАВЛЕНО
-            return default_session.query(auth_models.User).get(int(user_id))  # <--- ИЗМЕНЕНО
+            return default_session.query(auth_models.User).options(
+                joinedload(auth_models.User.role)
+            ).get(int(user_id))
 
         # Добавление задачи в планировщик
 

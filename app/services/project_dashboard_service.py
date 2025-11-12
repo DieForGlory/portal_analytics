@@ -4,7 +4,7 @@ import numpy as np
 from datetime import date
 from collections import defaultdict
 from sqlalchemy import func, extract, case
-
+from app.models.planning_models import PropertyType
 from app.models import planning_models
 from ..core.db_utils import get_planning_session, get_mysql_session
 from ..models.estate_models import EstateDeal, EstateHouse, EstateSell
@@ -61,6 +61,75 @@ def get_price_dynamics_data(complex_name: str, mysql_property_key: str = None):
 
     return price_dynamics
 
+
+def _get_commercial_analysis(complex_name, house_ids, active_version, planning_session, mysql_session,
+                             remainder_statuses):
+    """
+    Рассчитывает специальную аналитику для коммерческой недвижимости:
+    - Остатки на 1 и -1 этажах
+    - Среднюю площадь
+    - Среднюю цену "дна" за м²
+    """
+
+    # Инициализируем структуру ответа
+    analysis_data = {
+        floor_key: {'count': 0, 'total_area': 0.0, 'total_price': 0.0, 'avg_area': 0.0, 'avg_price_sqm': 0.0}
+        for floor_key in ['floor_1', 'floor_m1']
+    }
+
+    if not active_version:
+        return analysis_data  # Нужна активная версия для расчета цены "дна"
+
+    # 1. Получаем ключ MySQL для "Коммерческое помещение"
+    mysql_key = map_russian_to_mysql_key(PropertyType.COMM.value)
+
+    # 2. Получаем скидку для 100% оплаты коммерции в этом ЖК
+    discount = planning_session.query(planning_models.Discount).filter_by(
+        version_id=active_version.id,
+        complex_name=complex_name,
+        property_type=PropertyType.COMM,
+        payment_method=planning_models.PaymentMethod.FULL_PAYMENT
+    ).first()
+
+    total_discount_rate = 0
+    if discount:
+        total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0) + (discount.action or 0)
+
+    # 3. Выбираем все остатки коммерции на 1 и -1 этажах
+    comm_remainders = mysql_session.query(EstateSell).filter(
+        EstateSell.house_id.in_(house_ids),
+        EstateSell.estate_sell_category == mysql_key,
+        EstateSell.estate_sell_status_name.in_(remainder_statuses),
+        EstateSell.estate_floor.in_([1, -1]),  # Только 1 и -1 этажи
+        EstateSell.estate_price.isnot(None),
+        EstateSell.estate_area.isnot(None),
+        EstateSell.estate_area > 0
+    ).all()
+
+    # 4. Распределяем по словарям и считаем
+    for sell in comm_remainders:
+        # Рассчитываем цену "дна" (для коммерции нет вычета 3М)
+        bottom_price = (sell.estate_price or 0) * (1 - total_discount_rate)
+
+        target_dict_key = None
+        if sell.estate_floor == 1:
+            target_dict_key = 'floor_1'
+        elif sell.estate_floor == -1:
+            target_dict_key = 'floor_m1'
+
+        if target_dict_key:
+            analysis_data[target_dict_key]['count'] += 1
+            analysis_data[target_dict_key]['total_area'] += sell.estate_area
+            analysis_data[target_dict_key]['total_price'] += bottom_price
+
+    # 5. Считаем средние значения
+    for data in analysis_data.values():
+        if data['count'] > 0:
+            data['avg_area'] = data['total_area'] / data['count']
+            if data['total_area'] > 0:
+                data['avg_price_sqm'] = data['total_price'] / data['total_area']
+
+    return analysis_data
 
 # --- ИЗВЛЕЧЕН ИЗ report_service.py ---
 def _get_yearly_fact_metrics_for_complex(year: int, complex_name: str, property_type: str = None):
@@ -449,13 +518,105 @@ def get_project_passport_data(complex_name: str):
 
     sold_statuses = ["Сделка в работе", "Сделка проведена"]
     remainder_statuses = ["Маркетинговый резерв", "Подбор"]
+    VALID_STATUSES = ["Маркетинговый резерв", "Подбор"]
 
     # 1. Получаем ID домов в комплексе
     house_ids_query = mysql_session.query(EstateHouse.id).filter(EstateHouse.complex_name == complex_name)
     house_ids = [h[0] for h in house_ids_query.all()]
     if not house_ids:
         return None  # Комплекс не найден в MySQL
+    # =========================================================
+    # === НАЧАЛО: НОВЫЙ БЛОК РАСЧЕТА ПЛАН-ФАКТА ===
+    # =========================================================
 
+    latest_plan_fact_data = {}
+    total_deviation_data = {}
+    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+
+    # 1. --- Расчет последнего план-факта ---
+    latest_plan_entry = planning_session.query(planning_models.SalesPlan).filter_by(
+        complex_name=complex_name
+    ).order_by(
+        planning_models.SalesPlan.year.desc(),
+        planning_models.SalesPlan.month.desc()
+    ).first()
+
+    if latest_plan_entry:
+        year, month = latest_plan_entry.year, latest_plan_entry.month
+
+        # Суммируем все планы по этому проекту за этот месяц (все типы)
+        plans_query = planning_session.query(
+            func.sum(planning_models.SalesPlan.plan_units),
+            func.sum(planning_models.SalesPlan.plan_volume),
+            func.sum(planning_models.SalesPlan.plan_income)
+        ).filter_by(complex_name=complex_name, year=year, month=month).one()
+
+        # Получаем факты за этот месяц
+        facts_units = mysql_session.query(func.count(EstateDeal.id)).join(EstateSell).filter(
+            EstateSell.house_id.in_(house_ids),
+            EstateDeal.deal_status_name.in_(sold_statuses),
+            extract('year', effective_date) == year,
+            extract('month', effective_date) == month
+        ).scalar() or 0
+
+        facts_volume = mysql_session.query(func.sum(EstateDeal.deal_sum)).join(EstateSell).filter(
+            EstateSell.house_id.in_(house_ids),
+            EstateDeal.deal_status_name.in_(sold_statuses),
+            extract('year', effective_date) == year,
+            extract('month', effective_date) == month
+        ).scalar() or 0.0
+
+        facts_income = mysql_session.query(func.sum(FinanceOperation.summa)).join(EstateSell).filter(
+            EstateSell.house_id.in_(house_ids),
+            FinanceOperation.status_name == 'Проведено',
+            extract('year', FinanceOperation.date_added) == year,
+            extract('month', FinanceOperation.date_added) == month
+        ).scalar() or 0.0
+
+        latest_plan_fact_data = {
+            'period': f"{month:02d}.{year}",
+            'plan_units': plans_query[0] or 0,
+            'plan_volume': plans_query[1] or 0.0,
+            'plan_income': plans_query[2] or 0.0,
+            'fact_units': facts_units,
+            'fact_volume': facts_volume,
+            'fact_income': facts_income
+        }
+
+    # 2. --- Расчет суммарного отклонения за все время ---
+    total_plans_query = planning_session.query(
+        func.sum(planning_models.SalesPlan.plan_units),
+        func.sum(planning_models.SalesPlan.plan_volume),
+        func.sum(planning_models.SalesPlan.plan_income)
+    ).filter_by(complex_name=complex_name).one()
+
+    total_facts_units = mysql_session.query(func.count(EstateDeal.id)).join(EstateSell).filter(
+        EstateSell.house_id.in_(house_ids),
+        EstateDeal.deal_status_name.in_(sold_statuses)
+    ).scalar() or 0
+
+    total_facts_volume = mysql_session.query(func.sum(EstateDeal.deal_sum)).join(EstateSell).filter(
+        EstateSell.house_id.in_(house_ids),
+        EstateDeal.deal_status_name.in_(sold_statuses)
+    ).scalar() or 0.0
+
+    total_facts_income = mysql_session.query(func.sum(FinanceOperation.summa)).join(EstateSell).filter(
+        EstateSell.house_id.in_(house_ids),
+        FinanceOperation.status_name == 'Проведено'
+    ).scalar() or 0.0
+
+    total_deviation_data = {
+        'plan_units': total_plans_query[0] or 0,
+        'plan_volume': total_plans_query[1] or 0.0,
+        'plan_income': total_plans_query[2] or 0.0,
+        'fact_units': total_facts_units,
+        'fact_volume': total_facts_volume,
+        'fact_income': total_facts_income
+    }
+
+    # =========================================================
+    # === КОНЕЦ: НОВЫЙ БЛОК РАСЧЕТА ПЛАН-ФАКТА ===
+    # =========================================================
     # 2. Получаем статические данные из planning.db
     passport_data = planning_session.query(planning_models.ProjectPassport).get(complex_name)
     if not passport_data:
@@ -463,7 +624,9 @@ def get_project_passport_data(complex_name: str):
         passport_data = planning_models.ProjectPassport(complex_name=complex_name)
         planning_session.add(passport_data)
         planning_session.commit()
-
+    stages = passport_data.construction_stages.order_by(planning_models.ProjectConstructionStage.start_date.asc()).all()
+    static_data = passport_data.to_dict()
+    static_data['construction_stages'] = [stage.to_dict() for stage in stages]
     # 3. Получаем динамические данные
 
     # Общее кол-во квартир (всех типов)
@@ -563,9 +726,15 @@ def get_project_passport_data(complex_name: str):
         all_time_pace = total_sales / months_of_sales
 
     # Прогноз даты завершения продаж
+    target_sales_pace = None
+    if months_to_cadastre and months_to_cadastre > 0:
+        if total_remainders_count > 0:
+            target_sales_pace = total_remainders_count / months_to_cadastre
+        else:
+            target_sales_pace = 0
     forecast_date = None
     if all_time_pace > 0:
-        pace_with_coeff = all_time_pace * 1.4  # Понижающий коэффициент 20%
+        pace_with_coeff = all_time_pace # Понижающий коэффициент 20%
         if pace_with_coeff > 0:
             months_to_sell = total_remainders_count / pace_with_coeff
             forecast_date = date.today() + relativedelta(months=int(months_to_sell))
@@ -601,7 +770,25 @@ def get_project_passport_data(complex_name: str):
         FinanceOperation.status_name == "К оплате",
         FinanceOperation.payment_type != "Возврат поступлений при отмене сделки"
     ).scalar() or 0.0
+    # =========================================================
+    # === НАЧАЛО ИЗМЕНЕНИЙ: Вызываем новые функции ===
+    # =========================================================
 
+    # 4. Получаем данные для анализа коммерции
+    commercial_analysis_data = _get_commercial_analysis(
+        complex_name, house_ids, active_version,
+        planning_session, mysql_session, remainder_statuses
+    )
+
+    # 5. Считаем среднюю квадратуру остатков (Квартиры)
+    flat_remainders_metrics = remainders_by_type.get(planning_models.PropertyType.FLAT.value)
+    avg_area_flats = 0
+    if flat_remainders_metrics and flat_remainders_metrics['count'] > 0:
+        avg_area_flats = flat_remainders_metrics['total_area'] / flat_remainders_metrics['count']
+
+    # =========================================================
+    # === КОНЕЦ ИЗМЕНЕНИЙ ===
+    # =========================================================
     # Собираем все в один словарь
     dynamic_data = {
         'total_units': total_units,
@@ -612,14 +799,21 @@ def get_project_passport_data(complex_name: str):
         'top_payment_type': top_payment_type,
         'forecast_date': forecast_date.isoformat() if forecast_date else None,
         'active_discounts': active_discounts,
-        'expected_payments': expected_payments
+        'expected_payments': expected_payments,
+        'latest_plan_fact_data': latest_plan_fact_data,
+        'total_deviation_data': total_deviation_data,
+        'target_sales_pace': target_sales_pace,
+        'payment_distribution': payment_dist,  # <-- Данные для таблицы "Виды оплаты"
+        'commercial_analysis': commercial_analysis_data,  # <-- Данные для "Анализ коммерции"
+        'avg_area_flats': avg_area_flats  # <-- Данные для "Средняя квадратура остатков"
     }
+
 
     mysql_session.close()
     planning_session.close()
 
     return {
         'complex_name': complex_name,
-        'static_data': passport_data.to_dict(),
+        'static_data': static_data,
         'dynamic_data': dynamic_data
     }
