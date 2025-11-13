@@ -1,16 +1,21 @@
 # app/services/project_dashboard_service.py
-import pandas as pd
-import numpy as np
-from datetime import date
 from collections import defaultdict
+from datetime import date
+
+import pandas as pd
+from dateutil.relativedelta import relativedelta
 from sqlalchemy import func, extract, case
-from app.models.planning_models import PropertyType
+
 from app.models import planning_models
+from app.models.planning_models import PropertyType
 from ..core.db_utils import get_planning_session, get_mysql_session
 from ..models.estate_models import EstateDeal, EstateHouse, EstateSell
 from ..models.finance_models import FinanceOperation
 from ..models.planning_models import map_russian_to_mysql_key, map_mysql_key_to_russian_value
-from dateutil.relativedelta import relativedelta
+import pandas as pd
+import io
+from sqlalchemy.orm import joinedload
+from openpyxl.styles import Font, Alignment, Border, Side
 
 # --- ИЗВЛЕЧЕН ИЗ report_service.py ---
 def get_price_dynamics_data(complex_name: str, mysql_property_key: str = None):
@@ -618,7 +623,9 @@ def get_project_passport_data(complex_name: str):
     # === КОНЕЦ: НОВЫЙ БЛОК РАСЧЕТА ПЛАН-ФАКТА ===
     # =========================================================
     # 2. Получаем статические данные из planning.db
-    passport_data = planning_session.query(planning_models.ProjectPassport).get(complex_name)
+    passport_data = planning_session.query(planning_models.ProjectPassport).options(
+        joinedload(planning_models.ProjectPassport.competitors)  # Загружаем конкурентов сразу
+    ).get(complex_name)
     if not passport_data:
         # Создаем пустую запись, если ее нет
         passport_data = planning_models.ProjectPassport(complex_name=complex_name)
@@ -627,6 +634,7 @@ def get_project_passport_data(complex_name: str):
     stages = passport_data.construction_stages.order_by(planning_models.ProjectConstructionStage.start_date.asc()).all()
     static_data = passport_data.to_dict()
     static_data['construction_stages'] = [stage.to_dict() for stage in stages]
+    static_data['competitors'] = [c.to_dict() for c in passport_data.competitors]  # 'competitors'
     # 3. Получаем динамические данные
 
     # Общее кол-во квартир (всех типов)
@@ -817,3 +825,126 @@ def get_project_passport_data(complex_name: str):
         'static_data': static_data,
         'dynamic_data': dynamic_data
     }
+COMPETITOR_HEADER_MAP = {
+    'Название проекта': 'competitor_name',
+    'Дата начала строительства': 'start_date',
+    'Класс объекта': 'project_class',
+    'Остатки (шт)': 'remainders_units',
+    'Всего обьектов': 'total_units',
+    'Доступные виды ипотеки': 'mortgage_types',
+    'Наличие подземного паркинга': 'has_underground_parking',
+    'Наличие фитнеса': 'has_fitness',
+    'Наличие коммерции на первом этаже': 'has_ground_floor_commercial',
+    'Высота потолков': 'ceiling_height',
+    'Тип конструктива': 'construction_type',
+    'Плановая дата сдачи': 'planned_completion_date',
+    'Этап строительства': 'construction_stage',
+    'Цена за кв.м': 'price_per_sqm',
+    'Темп реализации проекта': 'sales_pace',
+    'Материал фасада': 'facade_material',
+    'Средняя площадь': 'avg_area'
+}
+
+
+def generate_competitor_template_excel():
+    """
+    Генерирует Excel-шаблон для загрузки данных о конкурентах.
+    """
+    headers = list(COMPETITOR_HEADER_MAP.keys())
+    # Создаем 8 пустых строк, как вы просили
+    data = [dict.fromkeys(headers) for _ in range(8)]
+
+    df = pd.DataFrame(data, columns=headers)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Competitors')
+        worksheet = writer.sheets['Competitors']
+
+        # Настраиваем стиль заголовков
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = pd.io.excel.styles.PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+        thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'),
+                             bottom=Side(style='thin'))
+
+        for col_idx, header in enumerate(headers, 1):
+            cell = worksheet.cell(row=1, column=col_idx)
+            cell.value = header
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(wrap_text=True, vertical='center')
+            cell.border = thin_border
+            # Устанавливаем ширину
+            worksheet.column_dimensions[cell.column_letter].width = 20
+
+    output.seek(0)
+    return output
+
+
+def process_competitor_excel(complex_name, file_storage):
+    """
+    Обрабатывает загруженный Excel-файл и сохраняет данные о конкурентах.
+    """
+    planning_session = get_planning_session()
+
+    try:
+        df = pd.read_excel(file_storage)
+
+        # Переименовываем столбцы в соответствии с именами полей модели
+        df.rename(columns=COMPETITOR_HEADER_MAP, inplace=True)
+
+        # Удаляем все старые записи для этого ЖК
+        planning_session.query(planning_models.ProjectCompetitor).filter_by(
+            passport_complex_name=complex_name
+        ).delete()
+
+        new_competitors = []
+        for index, row in df.iterrows():
+            # Пропускаем пустые строки
+            if row.get('competitor_name') is None or pd.isna(row.get('competitor_name')):
+                continue
+
+            # Преобразуем булевы значения (да/нет, 1/0, +/-)
+            def to_bool(val):
+                if pd.isna(val): return None
+                if isinstance(val, str):
+                    val = val.lower().strip()
+                    if val in ['да', 'yes', '+', '1']: return True
+                    if val in ['нет', 'no', '-', '0']: return False
+                return bool(val)
+
+            new_competitors.append(
+                planning_models.ProjectCompetitor(
+                    passport_complex_name=complex_name,
+                    competitor_name=row.get('competitor_name'),
+                    start_date=pd.to_datetime(row.get('start_date')).date() if pd.notna(
+                        row.get('start_date')) else None,
+                    project_class=row.get('project_class'),
+                    remainders_units=int(row.get('remainders_units')) if pd.notna(
+                        row.get('remainders_units')) else None,
+                    total_units=int(row.get('total_units')) if pd.notna(row.get('total_units')) else None,
+                    mortgage_types=row.get('mortgage_types'),
+                    has_underground_parking=to_bool(row.get('has_underground_parking')),
+                    has_fitness=to_bool(row.get('has_fitness')),
+                    has_ground_floor_commercial=to_bool(row.get('has_ground_floor_commercial')),
+                    ceiling_height=float(row.get('ceiling_height')) if pd.notna(row.get('ceiling_height')) else None,
+                    construction_type=row.get('construction_type'),
+                    planned_completion_date=pd.to_datetime(row.get('planned_completion_date')).date() if pd.notna(
+                        row.get('planned_completion_date')) else None,
+                    construction_stage=row.get('construction_stage'),
+                    price_per_sqm=float(row.get('price_per_sqm')) if pd.notna(row.get('price_per_sqm')) else None,
+                    sales_pace=float(row.get('sales_pace')) if pd.notna(row.get('sales_pace')) else None,
+                    facade_material=row.get('facade_material'),
+                    avg_area=float(row.get('avg_area')) if pd.notna(row.get('avg_area')) else None,
+                )
+            )
+
+        planning_session.add_all(new_competitors)
+        planning_session.commit()
+
+        return f"Успешно загружено {len(new_competitors)} записей о конкурентах."
+
+    except Exception as e:
+        planning_session.rollback()
+        print(f"Ошибка обработки файла конкурентов: {e}")
+        raise ValueError(f"Ошибка при чтении файла Excel. Убедитесь, что заголовки соответствуют шаблону. Ошибка: {e}")

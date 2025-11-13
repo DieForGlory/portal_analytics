@@ -530,3 +530,38 @@ def sales_funnel():
         filters={'start_date': start_date_str, 'end_date': end_date_str},
         active_view=view_mode
     )
+@report_bp.route('/project-passport/competitor-template')
+@login_required
+@permission_required('manage_settings') # Используем право админа
+def download_competitor_template():
+    """Отдает Excel-шаблон для таблицы конкурентов."""
+    excel_stream = project_dashboard_service.generate_competitor_template_excel()
+    return send_file(
+        excel_stream,
+        download_name='competitor_analysis_template.xlsx',
+        as_attachment=True,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+@report_bp.route('/project-passport/upload-competitors/<path:complex_name>', methods=['POST'])
+@login_required
+@permission_required('manage_settings') # Используем право админа
+def upload_competitor_data(complex_name):
+    """Обрабатывает загрузку Excel-файла с данными о конкурентах."""
+    if 'competitor_file' not in request.files:
+        flash('Файл не найден в запросе.', 'danger')
+        return redirect(url_for('report.project_passport', complex_name=complex_name))
+
+    file = request.files['competitor_file']
+    if file.filename == '':
+        flash('Файл не выбран.', 'warning')
+        return redirect(url_for('report.project_passport', complex_name=complex_name))
+
+    if file:
+        try:
+            message = project_dashboard_service.process_competitor_excel(complex_name, file)
+            flash(message, 'success')
+        except Exception as e:
+            flash(f'Ошибка при обработке файла: {e}', 'danger')
+
+    return redirect(url_for('report.project_passport', complex_name=complex_name))

@@ -5,7 +5,6 @@ from datetime import date, datetime
 from flask import Flask, request, render_template, g, session, current_app
 from flask_login import LoginManager
 from flask_cors import CORS
-from flask_migrate import Migrate
 from flask_babel import Babel
 from .web.obligations_routes import obligations_bp
 from .core.config import DevelopmentConfig
@@ -13,6 +12,7 @@ from .core.extensions import db
 from .core.db_utils import get_default_session
 from decimal import Decimal # <-- УБЕДИТЕСЬ, ЧТО ЭТОТ ИМПОРТ ЕСТЬ
 from sqlalchemy.orm import joinedload
+from app.core.extensions import db, migrate_default, migrate_planning, login_manager
 
 # 1. Инициализация расширений
 login_manager = LoginManager()
@@ -61,7 +61,16 @@ def create_app(config_class=DevelopmentConfig):
     # Инициализация всех расширений
     CORS(app)
     db.init_app(app)
-    Migrate(app, db)
+    # 1. Миграции для 'main_app.db' (пользователи, роли и т.д.)
+    # (Предполагаем, что старая папка 'migrations' будет переименована в 'migrations_default')
+    migrate_default.init_app(app, db, directory='migrations_default',
+                             # Включаем только модели БЕЗ bind_key
+                             include_symbol=lambda name, table: table.info.get('bind_key') is None)
+
+    # 2. Миграции для 'planning.db' (паспорта, конкуренты и т.д.)
+    migrate_planning.init_app(app, db, directory='migrations_planning',
+                              # Включаем только модели с bind_key == 'planning_db'
+                              include_symbol=lambda name, table: table.info.get('bind_key') == 'planning_db')
     login_manager.init_app(app)
     babel.init_app(app, locale_selector=select_locale)
     app.json_encoder = CustomJSONEncoder

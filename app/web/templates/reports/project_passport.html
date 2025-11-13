@@ -247,8 +247,8 @@
                         </tr>
                         <tr>
                             <td>{{ _('Сред. площадь, м²') }}</td>
-                            <td class="text-end">{{ "%.1f".format(comm.floor_m1.avg_area or 0) }}</td>
-                            <td class="text-end">{{ "%.1f".format(comm.floor_1.avg_area or 0) }}</td>
+                            <td class="text-end">{{ (comm.floor_m1.avg_area or 0) | round(1) }}</td>
+                            <td class="text-end">{{ (comm.floor_1.avg_area or 0) | round(1) }}</td>
                         </tr>
                         <tr>
                             <td>{{ _('Сред. цена дна, UZS/м²') }}</td>
@@ -264,7 +264,7 @@
         </div>
 
         <div class="passport-card">
-            <h5 class="card-title mb-3">{{ _('Темпы строительства') }}</h5>
+            <h5 class="card-title mb-3">{{ _('Этапы строительства') }}</h5>
             <div class="table-responsive">
                 <table class="table" id="construction-stages-table">
                     <thead>
@@ -299,8 +299,10 @@
             </form>
         </div>
 
-    </div> <div class="col-lg-4">
-        <div class="row g-4"> <div class="col-12">
+        </div>
+    <div class="col-lg-4">
+        <div class="row g-4">
+            <div class="col-12">
                 <div class="passport-card">
                     <h5 class="card-title mb-4">{{ _('Команда проекта') }}</h5>
                     <div class="mb-3">
@@ -431,8 +433,102 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+    </div>
+<div class="row g-4 mt-0"> <div class="col-12">
+        <div class="passport-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="card-title mb-0">{{ _('Анализ конкурентов') }}</h5> <div class="d-flex gap-2 passport-value-edit">
+                    <a href="{{ url_for('report.download_competitor_template') }}" class="btn btn-sm btn-info">
+                        <i class="bi bi-download me-1"></i> {{ _('Скачать шаблон') }}
+                    </a>
+                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#uploadCompetitorModal">
+                        <i class="bi bi-upload me-1"></i> {{ _('Загрузить Excel') }}
+                    </button>
+                </div>
             </div>
-    </div> </div> {% endblock %}
+
+            <table class="table table-sm table-striped table-bordered" style="font-size: 0.8rem;">
+                <thead class="table-light" style="vertical-align: middle;">
+                    <tr>
+                        <th>{{ _('Название проекта') }}</th>
+                        <th>{{ _('Дата старта') }}</th>
+                        <th>{{ _('Класс') }}</th>
+                        <th class="text-end">{{ _('Остатки, шт') }}</th>
+                        <th class="text-end">{{ _('Всего, шт') }}</th>
+                        <th>{{ _('Ипотека') }}</th>
+                        <th class="text-center">{{ _('Паркинг') }}</th>
+                        <th class="text-center">{{ _('Фитнес') }}</th>
+                        <th class="text-center">{{ _('Коммерция') }}</th>
+                        <th class="text-end">{{ _('Потолки, м') }}</th>
+                        <th>{{ _('Конструктив') }}</th>
+                        <th>{{ _('План. сдача') }}</th>
+                        <th>{{ _('Этап') }}</th>
+                        <th class="text-end">{{ _('Цена, $/м²') }}</th>
+                        <th class="text-end">{{ _('Темп, ю/мес') }}</th>
+                        <th>{{ _('Фасад') }}</th>
+                        <th class="text-end">{{ _('Сред. пл, м²') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for comp in data.static_data.competitors %}
+                    <tr>
+                        <td><strong>{{ comp.competitor_name }}</strong></td>
+                        <td>{{ comp.start_date }}</td>
+                        <td>{{ comp.project_class }}</td>
+                        <td class="text-end">{{ comp.remainders_units }}</td>
+                        <td class="text-end">{{ comp.total_units }}</td>
+                        <td>{{ comp.mortgage_types }}</td>
+                        <td class="text-center">{% if comp.has_underground_parking %}<i class="bi bi-check-circle-fill text-success"></i>{% elif comp.has_underground_parking == false %}<i class="bi bi-x-circle-fill text-danger"></i>{% else %}?{% endif %}</td>
+                        <td class="text-center">{% if comp.has_fitness %}<i class="bi bi-check-circle-fill text-success"></i>{% elif comp.has_fitness == false %}<i class="bi bi-x-circle-fill text-danger"></i>{% else %}?{% endif %}</td>
+                        <td class="text-center">{% if comp.has_ground_floor_commercial %}<i class="bi bi-check-circle-fill text-success"></i>{% elif comp.has_ground_floor_commercial == false %}<i class="bi bi-x-circle-fill text-danger"></i>{% else %}?{% endif %}</td>
+                        <td class="text-end">{{ comp.ceiling_height }}</td>
+                        <td>{{ comp.construction_type }}</td>
+                        <td>{{ comp.planned_completion_date }}</td>
+                        <td>{{ comp.construction_stage }}</td>
+                        <td class="text-end fw-bold text-success">{% if comp.price_per_sqm %}${{ "%.0f"|format(comp.price_per_sqm) }}{% endif %}</td>
+                        <td class="text-end">{{ comp.sales_pace }}</td>
+                        <td>{{ comp.facade_material }}</td>
+                        <td class="text-end">{{ comp.avg_area }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="17" class="text-center text-muted p-4">
+                            {{ _('Данные о конкурентах не загружены.') }}
+                            <span class="passport-value-edit"><br>{{ _('Нажмите "Редактировать", чтобы загрузить файл.') }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="uploadCompetitorModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="uploadModalLabel">{{ _('Загрузить файл анализа конкурентов') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ url_for('report.upload_competitor_data', complex_name=data.complex_name) }}" method="POST" enctype="multipart/form-data">
+          <div class="modal-body">
+            <p class="text-muted">{{ _('Существующие данные будут полностью перезаписаны данными из файла.') }}</p>
+            <div class="mb-3">
+              <label for="competitor_file" class="form-label">{{ _('Выберите файл Excel') }}</label>
+              <input class="form-control" type="file" id="competitor_file" name="competitor_file" accept=".xlsx, .xls" required>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Отмена') }}</button>
+            <button type="submit" class="btn btn-primary">{{ _('Загрузить и перезаписать') }}</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
 
 {% block scripts %}
 {{ super() }}
