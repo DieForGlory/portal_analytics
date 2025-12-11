@@ -27,6 +27,9 @@
             </button>
         {% endif %}
 
+        <a href="{{ url_for('report.download_project_passport_pptx', complex_name=data.complex_name) }}" class="btn btn-outline-primary">
+            <i class="bi bi-file-earmark-slides me-2"></i>{{ _('Скачать .pptx') }}
+        </a>
         <div class="ms-4 text-center">
             <label class="form-label">{{ _('Валюта') }}</label>
             <div class="form-check form-switch fs-4">
@@ -325,6 +328,28 @@
 
             <div class="col-12">
                 <div class="passport-card">
+                    <h5 class="card-title mb-3">{{ _('Статистика по Лидам') }}</h5>
+                    {% set leads = data.dynamic_data.lead_stats %}
+                    {% if leads %}
+                        <div class="mb-3">
+                            <span class="passport-label">{{ _('Всего заявок') }}</span>
+                            <span class="passport-value-large">{{ leads.total_leads }}</span>
+                        </div>
+                         <div class="mb-3">
+                            <span class="passport-label">{{ _('Целевых заявок') }}</span>
+                            <span class="passport-value-large">{{ leads.targeted_leads }}</span>
+                        </div>
+                        <div>
+                            <span class="passport-label">{{ _('Назначено встреч') }}</span>
+                            <span class="passport-value-large">{{ leads.scheduled_meetings }}</span>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-secondary">{{ _('Данные по лидам отсутствуют.') }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="passport-card">
                     <h5 class="card-title mb-4">{{ _('Ключевые показатели') }}</h5>
 
                     <div class="mb-3">
@@ -488,7 +513,7 @@
                         <td>{{ comp.planned_completion_date }}</td>
                         <td>{{ comp.construction_stage }}</td>
                         <td class="text-end fw-bold text-success">{% if comp.price_per_sqm %}${{ "%.0f"|format(comp.price_per_sqm) }}{% endif %}</td>
-                        <td class="text-end">{{ comp.sales_pace }}</td>
+                        <td class_alias="text-end">{{ comp.sales_pace }}</td>
                         <td>{{ comp.facade_material }}</td>
                         <td class="text-end">{{ comp.avg_area }}</td>
                     </tr>

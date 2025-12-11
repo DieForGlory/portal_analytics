@@ -4,19 +4,42 @@ from datetime import date
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import func, extract, case
+from sqlalchemy import func, extract, case, not_
 
+from . import presentation_service
+from ..services import currency_service
+
+# Импорт для графиков
+try:
+    import matplotlib
+    matplotlib.use('Agg') # Важно для работы в фоновом режиме
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None
 from app.models import planning_models
 from app.models.planning_models import PropertyType
 from ..core.db_utils import get_planning_session, get_mysql_session
 from ..models.estate_models import EstateDeal, EstateHouse, EstateSell
+from ..models.funnel_models import EstateBuy
 from ..models.finance_models import FinanceOperation
 from ..models.planning_models import map_russian_to_mysql_key, map_mysql_key_to_russian_value
-import pandas as pd
 import io
 from sqlalchemy.orm import joinedload
+try:
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN, MSO_VERTICAL_ANCHOR  # <-- ИЗМЕНЕНИЕ ЗДЕСЬ
+    from pptx.enum.shapes import MSO_SHAPE
+except ImportError:
+    # Обработка, если библиотека не установлена
+    Presentation = None
 from openpyxl.styles import Font, Alignment, Border, Side
-
+GH_GOLD = RGBColor(0xC5, 0x95, 0x00) # (197, 149, 0) - Золотой
+GH_DARK_BLUE = RGBColor(0x00, 0x33, 0x66) # (0, 51, 102) - Темно-синий
+GH_BLACK = RGBColor(0x10, 0x10, 0x10) # Почти черный
+GH_GRAY = RGBColor(0x80, 0x80, 0x80)
+LOGO_PATH = 'app/static/logo.png'
 # --- ИЗВЛЕЧЕН ИЗ report_service.py ---
 def get_price_dynamics_data(complex_name: str, mysql_property_key: str = None):
     """
@@ -66,6 +89,52 @@ def get_price_dynamics_data(complex_name: str, mysql_property_key: str = None):
 
     return price_dynamics
 
+
+def _get_project_lead_stats(mysql_session, house_ids: list):
+    """
+    Собирает статистику по Лидам (из EstateBuy) за ТЕКУЩИЙ МЕСЯЦ
+    для списка ID домов.
+    """
+    if not house_ids:
+        return {'total_leads': 0, 'targeted_leads': 0, 'scheduled_meetings': 0}
+
+    # ============================================
+    # === НАЧАЛО ИЗМЕНЕНИЙ: Фильтр по дате ===
+    # ============================================
+    today = date.today()
+    current_year = today.year
+    current_month = today.month
+
+    # Базовый запрос (сразу фильтрует по ЖК и ТЕКУЩЕМУ МЕСЯЦУ)
+    base_query = mysql_session.query(EstateBuy).filter(
+        EstateBuy.house_id.in_(house_ids),
+        extract('year', EstateBuy.date_added) == current_year,
+        extract('month', EstateBuy.date_added) == current_month
+    )
+    # ============================================
+    # === КОНЕЦ ИЗМЕНЕНИЙ ===
+    # ============================================
+
+    # 1. Всего заявок (без фильтрации по статусу, как вы просили)
+    total_leads = base_query.count()
+
+    # 2. Целевые заявки
+    NON_TARGETED_STATUSES = ['Отказ', 'Нецелевое', 'Проверка']
+    targeted_leads = base_query.filter(
+        not_(EstateBuy.status_name.in_(NON_TARGETED_STATUSES))
+    ).count()
+
+    # 3. Назначенные встречи
+    MEETING_STATUS_CUSTOM_ID = 616
+    scheduled_meetings = base_query.filter(
+        EstateBuy.status_custom == MEETING_STATUS_CUSTOM_ID
+    ).count()
+
+    return {
+        'total_leads': total_leads,
+        'targeted_leads': targeted_leads,
+        'scheduled_meetings': scheduled_meetings
+    }
 
 def _get_commercial_analysis(complex_name, house_ids, active_version, planning_session, mysql_session,
                              remainder_statuses):
@@ -793,6 +862,7 @@ def get_project_passport_data(complex_name: str):
     avg_area_flats = 0
     if flat_remainders_metrics and flat_remainders_metrics['count'] > 0:
         avg_area_flats = flat_remainders_metrics['total_area'] / flat_remainders_metrics['count']
+    lead_stats = _get_project_lead_stats(mysql_session, house_ids)
 
     # =========================================================
     # === КОНЕЦ ИЗМЕНЕНИЙ ===
@@ -813,6 +883,7 @@ def get_project_passport_data(complex_name: str):
         'target_sales_pace': target_sales_pace,
         'payment_distribution': payment_dist,  # <-- Данные для таблицы "Виды оплаты"
         'commercial_analysis': commercial_analysis_data,  # <-- Данные для "Анализ коммерции"
+        'lead_stats': lead_stats,
         'avg_area_flats': avg_area_flats  # <-- Данные для "Средняя квадратура остатков"
     }
 
@@ -948,3 +1019,27 @@ def process_competitor_excel(complex_name, file_storage):
         planning_session.rollback()
         print(f"Ошибка обработки файла конкурентов: {e}")
         raise ValueError(f"Ошибка при чтении файла Excel. Убедитесь, что заголовки соответствуют шаблону. Ошибка: {e}")
+
+
+
+
+def generate_passport_pptx(complex_name: str):
+    """
+    Собирает данные для паспорта и передает их в сервис генерации презентаций.
+    """
+
+    # 1. Получаем все данные для паспорта
+    data = get_project_passport_data(complex_name)
+    if not data:
+        return None
+
+    # 2. Получаем курс USD
+    usd_rate = currency_service.get_current_effective_rate()
+    if not usd_rate or usd_rate == 0:
+        usd_rate = 12500.0  # Запасной курс
+
+    # 3. Вызываем новый сервис
+    # (Убедитесь, что presentation_service импортирован вверху файла)
+    return presentation_service.generate_passport_pptx(data, usd_rate)
+
+

@@ -6,10 +6,25 @@ class EstateBuy(db.Model):
     __tablename__ = 'estate_buys'
 
     id = db.Column(db.Integer, primary_key=True)
-    date_added = db.Column(db.Date)  # <-- Используем это поле для фильтрации
+    date_added = db.Column(db.Date)
     created_at = db.Column(db.DateTime)
     status_name = db.Column(db.String(32))
     custom_status_name = db.Column(db.String(255))
+
+    # ============================================
+    # === НАЧАЛО ИЗМЕНЕНИЙ: Добавляем поля ===
+    # ============================================
+
+    # ID дома (для связи с ЖК)
+    house_id = db.Column(db.Integer, nullable=True)
+
+    # ID кастомного статуса (для "Назначена встреча = 616")
+    status_custom = db.Column(db.Integer, nullable=True)
+
+    # ============================================
+    # === КОНЕЦ ИЗМЕНЕНИЙ ===
+    # ============================================
+
     __bind_key__ = 'mysql_source'
 
 

@@ -1,6 +1,7 @@
 # app/web/report_routes.py
 import json
 import os
+import io
 from datetime import date, timedelta  # Убедитесь, что date импортирован
 from datetime import datetime
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
@@ -565,3 +566,34 @@ def upload_competitor_data(complex_name):
             flash(f'Ошибка при обработке файла: {e}', 'danger')
 
     return redirect(url_for('report.project_passport', complex_name=complex_name))
+
+
+@report_bp.route('/project-passport/download-pptx/<path:complex_name>')
+@login_required
+@permission_required('view_project_dashboard')  # Используем то же право
+def download_project_passport_pptx(complex_name):
+    """
+    Генерирует и отдает "Паспорт проекта" в виде .pptx файла.
+    """
+    try:
+        # 1. Вызываем новый сервис для генерации файла
+        file_stream = project_dashboard_service.generate_passport_pptx(complex_name)
+
+        if file_stream is None:
+            flash(f"Не удалось сгенерировать презентацию для '{complex_name}'.", "danger")
+            return redirect(url_for('report.project_passport', complex_name=complex_name))
+
+        # 2. Формируем имя файла
+        filename = f"Passport_{complex_name}_{date.today().isoformat()}.pptx"
+
+        # 3. Отправляем файл пользователю
+        return send_file(
+            file_stream,
+            download_name=filename,
+            as_attachment=True,
+            mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        )
+    except Exception as e:
+        current_app.logger.error(f"Ошибка генерации PPTX для {complex_name}: {e}")
+        flash(f"Произошла внутренняя ошибка при создании файла: {e}", "danger")
+        return redirect(url_for('report.project_passport', complex_name=complex_name))

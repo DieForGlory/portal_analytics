@@ -77,7 +77,8 @@ def get_inventory_summary_data():
             deduction = 3_000_000 if prop_type_enum == PropertyType.FLAT else 0
             price_for_calc = sell.estate_price - deduction
             if price_for_calc > 0:
-                total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0) + (discount.action or 0)
+                total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
+                print(discount.mpp)
                 bottom_price = price_for_calc * (1 - total_discount_rate)
 
         metrics = summary_by_complex[complex_name][russian_category_value]
