@@ -55,17 +55,21 @@
                                 </a>
                             </li>
                             {% endif %}
-                            {# CHANGE: Replaced role check with permission check #}
+
                             {% if current_user.can('view_plan_fact_report') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle {% if request.blueprint == 'report' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     {{ _('Отчетность') }}
                                 </a>
                                 <ul class="dropdown-menu">
-                                    {# Each item can have its own permission check if needed, but the parent one covers the dropdown #}
                                     <li><a class="dropdown-item" href="{{ url_for('report.plan_fact_report') }}">{{ _('План-факт отчет') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.inventory_summary') }}">{{ _('Сводка по остаткам') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_funnel') }}">{{ _('Воронка продаж') }}</a></li>
+
+                                    {# --- ДОБАВЛЕНО: Ссылка на новый отчет --- #}
+                                    <li><a class="dropdown-item" href="{{ url_for('report.sales_pace_report') }}">{{ _('Темпы продаж (Сравнение)') }}</a></li>
+
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.manager_performance_report') }}">{{ _('Планы менеджеров') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('manager_analytics.show_report') }}">{{ _('Аналитика по менеджерам') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('obligations.obligation_control') }}">{{ _('Контроль обязательств') }}</a></li>
@@ -73,7 +77,6 @@
                             </li>
                             {% endif %}
 
-                            {# CHANGE: Replaced role check with permission check #}
                             {% if current_user.can('manage_discounts') or current_user.can('manage_users') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle {% if request.blueprint in ['auth', 'settings'] or request.endpoint in ['discount.versions_index', 'discount.upload_discounts', 'report.upload_plan'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">

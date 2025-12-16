@@ -31,6 +31,9 @@
             <div class="card-header"><h5 class="mb-0">{{ _('1. Выберите источник курса') }}</h5></div>
             <div class="card-body">
                 <form method="POST">
+                    <button type="submit" name="update_cbu" value="1" class="btn btn-warning">
+                        Обновить курс с ЦБ сейчас
+                    </button>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="rate_source" id="source_cbu" value="cbu" {% if settings.rate_source == 'cbu' %}checked{% endif %}>
                         <label class="form-check-label" for="source_cbu">{{ _('Курс Центрального Банка (обновляется автоматически)') }}</label>

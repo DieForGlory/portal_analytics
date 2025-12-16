@@ -6,7 +6,7 @@ from sqlalchemy import func, extract
 from ..core.db_utils import get_planning_session, get_mysql_session
 import io
 from collections import defaultdict
-
+from dateutil.relativedelta import relativedelta
 # --- ИЗМЕНЕНИЯ ЗДЕСЬ: Обновляем импорты ---
 from app.models import planning_models
 from .data_service import get_all_complex_names
@@ -529,6 +529,103 @@ def generate_plan_fact_excel(year: int, month: int, property_type: str):
     output.seek(0)
     return output
 
+
+def get_sales_pace_comparison_data():
+    """
+    Собирает данные по темпам продаж (кол-во сделок) для ВСЕХ проектов
+    начиная с 2022 года.
+    Возвращает структуру для Chart.js, включая агрегированные данные.
+    """
+    mysql_session = get_mysql_session()
+    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+    start_date = date(2022, 1, 1)
+    today = date.today()
+
+    # 1. Запрашиваем данные по всем ЖК
+    query = mysql_session.query(
+        EstateHouse.complex_name,
+        extract('year', effective_date).label('year'),
+        extract('month', effective_date).label('month'),
+        func.count(EstateDeal.id).label('cnt')
+    ).select_from(EstateDeal).join(EstateSell).join(EstateHouse).filter(
+        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"]),
+        effective_date >= start_date
+    ).group_by(
+        EstateHouse.complex_name, 'year', 'month'
+    ).all()
+
+    # 2. Организуем данные: complex -> "YYYY-MM" -> count
+    data_map = defaultdict(lambda: defaultdict(int))
+    all_complexes = set()
+
+    for row in query:
+        key = f"{int(row.year)}-{int(row.month):02d}"
+        data_map[row.complex_name][key] = row.cnt
+        all_complexes.add(row.complex_name)
+
+    # 3. Формируем помесячные данные (Monthly)
+    timeline_months = []
+    timeline_labels_monthly = []
+    curr = start_date
+    while curr <= today:
+        key = f"{curr.year}-{curr.month:02d}"
+        timeline_months.append(key)
+        timeline_labels_monthly.append(f"{curr.month:02d}.{curr.year}")
+        curr += relativedelta(months=1)
+
+    datasets_monthly = []
+    aggregate_monthly = [0] * len(timeline_months)  # Массив для суммы
+
+    sorted_complexes = sorted(list(all_complexes))
+
+    for complex_name in sorted_complexes:
+        data_points = [data_map[complex_name][m] for m in timeline_months]
+
+        # Складываем в общий котел
+        for i, val in enumerate(data_points):
+            aggregate_monthly[i] += val
+
+        datasets_monthly.append({
+            'label': complex_name,
+            'data': data_points,
+            'fill': False
+        })
+
+    # 4. Формируем погодовые данные (Yearly)
+    years = sorted(list(set([m[:4] for m in timeline_months])))
+    datasets_yearly = []
+    aggregate_yearly = [0] * len(years)
+
+    for complex_name in sorted_complexes:
+        yearly_counts = defaultdict(int)
+        for m_key, val in data_map[complex_name].items():
+            y_key = m_key[:4]
+            yearly_counts[y_key] += val
+
+        data_points = [yearly_counts[y] for y in years]
+
+        # Складываем в общий котел
+        for i, val in enumerate(data_points):
+            aggregate_yearly[i] += val
+
+        datasets_yearly.append({
+            'label': complex_name,
+            'data': data_points
+        })
+
+    return {
+        'complex_list': sorted_complexes,  # Список имен проектов для выпадающего списка
+        'monthly': {
+            'labels': timeline_labels_monthly,
+            'datasets': datasets_monthly,
+            'aggregate': aggregate_monthly
+        },
+        'yearly': {
+            'labels': years,
+            'datasets': datasets_yearly,
+            'aggregate': aggregate_yearly
+        }
+    }
 
 def calculate_grand_totals(year, month):
     """

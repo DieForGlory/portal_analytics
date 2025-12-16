@@ -291,23 +291,41 @@ def project_passport(complex_name):
         static_data_json=json.dumps(passport_full_data.get('static_data', {})) ,
         usd_to_uzs_rate=usd_rate# Для JS
     )
+
+
 @report_bp.route('/currency-settings', methods=['GET', 'POST'])
 @login_required
 @permission_required('manage_settings')
 def currency_settings():
     if request.method == 'POST':
+        # 1. Смена источника
         if 'set_source' in request.form:
             source = request.form.get('rate_source')
-            currency_service.set_rate_source(source)
-            flash(f"Источник курса изменен на '{source}'.", "success")
-        if 'set_manual_rate' in request.form:
+            try:
+                currency_service.set_rate_source(source)
+                flash(f"Источник курса изменен на '{source}'.", "success")
+            except ValueError as e:
+                flash(str(e), "danger")
+
+        # 2. Установка ручного курса
+        elif 'set_manual_rate' in request.form:
             try:
                 rate = float(request.form.get('manual_rate'))
                 currency_service.set_manual_rate(rate)
                 flash(f"Ручной курс успешно установлен: {rate}.", "success")
             except (ValueError, TypeError):
                 flash("Неверное значение для ручного курса.", "danger")
+
+        # 3. ДОБАВЛЕНО: Принудительное обновление курса ЦБ
+        elif 'update_cbu' in request.form:
+            success = currency_service.update_cbu_rate()
+            if success:
+                flash("Курс ЦБ успешно обновлен.", "success")
+            else:
+                flash("Не удалось обновить курс ЦБ. Проверьте логи.", "danger")
+
         return redirect(url_for('report.currency_settings'))
+
     settings = currency_service._get_settings()
     return render_template('settings/currency_settings.html', settings=settings, title="Настройки курса валют")
 
@@ -567,6 +585,24 @@ def upload_competitor_data(complex_name):
 
     return redirect(url_for('report.project_passport', complex_name=complex_name))
 
+
+@report_bp.route('/sales-pace-report')
+@login_required
+@permission_required('view_plan_fact_report')
+def sales_pace_report():
+    """
+    Отдельная страница отчета "Темп продаж" (Сравнение проектов).
+    """
+    # Теперь берем данные из report_service
+    pace_data = report_service.get_sales_pace_comparison_data()
+
+    charts_json = json.dumps(pace_data)
+
+    return render_template(
+        'reports/sales_pace_report.html',
+        title="Сравнение темпов продаж",
+        charts_json=charts_json
+    )
 
 @report_bp.route('/project-passport/download-pptx/<path:complex_name>')
 @login_required
