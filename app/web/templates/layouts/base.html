@@ -68,7 +68,8 @@
 
                                     {# --- ДОБАВЛЕНО: Ссылка на новый отчет --- #}
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_pace_report') }}">{{ _('Темпы продаж (Сравнение)') }}</a></li>
-
+                                    <li><a class="dropdown-item" href="{{ url_for('registry.index') }}">{{ _('Реестр спец. сделок') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('cancellations.index') }}">{{ _('Реестр расторжений') }}</a></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.manager_performance_report') }}">{{ _('Планы менеджеров') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('manager_analytics.show_report') }}">{{ _('Аналитика по менеджерам') }}</a></li>

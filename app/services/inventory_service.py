@@ -20,6 +20,7 @@ def get_inventory_summary_data():
     """
     Собирает данные по остаткам и возвращает детализацию и общую сводку,
     учитывая исключенные ЖК. Также включает общую сумму ожидаемых поступлений.
+    Возвращает: summary_by_complex, overall_summary, summary_by_house
     """
     # 1. Получаем список исключенных ЖК
     excluded_complex_names = {c.complex_name for c in default_session.query(ExcludedComplex).all()}
@@ -51,9 +52,10 @@ def get_inventory_summary_data():
 
     unsold_sells = unsold_sells_query.all()
 
-    # 4. Получаем все ожидаемые поступления (без фильтра по дате)
+    # 4. Получаем все ожидаемые поступления (с разбивкой по домам)
     expected_income_query = mysql_session.query(
         EstateHouse.complex_name,
+        EstateHouse.name,  # Добавляем имя дома в выборку
         EstateSell.estate_sell_category,
         func.sum(FinanceOperation.summa)
     ).join(EstateSell, FinanceOperation.estate_sell_id == EstateSell.id) \
@@ -69,20 +71,20 @@ def get_inventory_summary_data():
         )
 
     expected_income_results = expected_income_query.group_by(
-        EstateHouse.complex_name, EstateSell.estate_sell_category
+        EstateHouse.complex_name, EstateHouse.name, EstateSell.estate_sell_category
     ).all()
 
-    # Собираем мапу ожидаемых поступлений: (ЖК, Тип) -> Сумма
+    # Собираем мапу ожидаемых поступлений: (ЖК, Дом, Тип) -> Сумма
     expected_income_map = defaultdict(float)
-    for complex_name, cat_key, amount in expected_income_results:
+    for complex_name, house_name, cat_key, amount in expected_income_results:
         try:
             rus_val = map_mysql_key_to_russian_value(cat_key)
-            expected_income_map[(complex_name, rus_val)] += (amount or 0)
+            expected_income_map[(complex_name, house_name, rus_val)] += (amount or 0)
         except ValueError:
             continue
 
-    # 5. Агрегируем данные
-    summary_by_complex = defaultdict(lambda: defaultdict(lambda: {
+    # 5. Агрегируем данные по ДОМАМ (более детально)
+    summary_by_house = defaultdict(lambda: defaultdict(lambda: {
         'units': 0, 'total_area': 0.0, 'total_value': 0.0, 'expected_income': 0.0
     }))
 
@@ -94,6 +96,7 @@ def get_inventory_summary_data():
             russian_category_value = map_mysql_key_to_russian_value(sell.estate_sell_category)
             prop_type_enum = PropertyType(russian_category_value)
             complex_name = sell.house.complex_name
+            house_name = sell.house.name
             if not complex_name:
                 continue
         except ValueError:
@@ -110,16 +113,30 @@ def get_inventory_summary_data():
             elif price_for_calc > 0:
                 bottom_price = price_for_calc
 
-        metrics = summary_by_complex[complex_name][russian_category_value]
+        # Ключ теперь включает дом
+        metrics = summary_by_house[(complex_name, house_name)][russian_category_value]
         metrics['units'] += 1
         metrics['total_area'] += sell.estate_area
         metrics['total_value'] += bottom_price
 
-    # Добавляем данные по ожидаемым поступлениям
-    for (c_name, p_type), amount in expected_income_map.items():
-        summary_by_complex[c_name][p_type]['expected_income'] = amount
+    # Добавляем данные по ожидаемым поступлениям в разбивку по домам
+    for (c_name, h_name, p_type), amount in expected_income_map.items():
+        summary_by_house[(c_name, h_name)][p_type]['expected_income'] = amount
 
-    # 6. Считаем общую сводку
+    # 6. Агрегируем данные по ЖК (для совместимости с веб-вью)
+    summary_by_complex = defaultdict(lambda: defaultdict(lambda: {
+        'units': 0, 'total_area': 0.0, 'total_value': 0.0, 'expected_income': 0.0
+    }))
+
+    for (c_name, h_name), prop_data in summary_by_house.items():
+        for p_type, metrics in prop_data.items():
+            target = summary_by_complex[c_name][p_type]
+            target['units'] += metrics['units']
+            target['total_area'] += metrics['total_area']
+            target['total_value'] += metrics['total_value']
+            target['expected_income'] += metrics['expected_income']
+
+    # 7. Считаем общую сводку
     overall_summary = defaultdict(lambda: {
         'units': 0, 'total_area': 0.0, 'total_value': 0.0, 'expected_income': 0.0
     })
@@ -131,7 +148,16 @@ def get_inventory_summary_data():
             overall_summary[prop_type]['total_value'] += metrics['total_value']
             overall_summary[prop_type]['expected_income'] += metrics['expected_income']
 
-    # 7. Считаем средние цены
+    # 8. Считаем средние цены
+    # Для сводки по домам
+    for key, prop_types_data in summary_by_house.items():
+        for prop_type, metrics in prop_types_data.items():
+            if metrics['total_area'] > 0:
+                metrics['avg_price_m2'] = metrics['total_value'] / metrics['total_area']
+            else:
+                metrics['avg_price_m2'] = 0
+
+    # Для сводки по ЖК
     for complex_name, prop_types_data in summary_by_complex.items():
         for prop_type, metrics in prop_types_data.items():
             if metrics['total_area'] > 0:
@@ -139,18 +165,19 @@ def get_inventory_summary_data():
             else:
                 metrics['avg_price_m2'] = 0
 
+    # Для общей сводки
     for prop_type, metrics in overall_summary.items():
         if metrics['total_area'] > 0:
             metrics['avg_price_m2'] = metrics['total_value'] / metrics['total_area']
         else:
             metrics['avg_price_m2'] = 0
 
-    return summary_by_complex, overall_summary
+    return summary_by_complex, overall_summary, summary_by_house
 
 
 def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float):
     """
-    Создает Excel-файл с учетом выбранной валюты и новым столбцом ожидаемых поступлений.
+    Создает Excel-файл. Поддерживает как группировку по ЖК, так и по (ЖК, Дом).
     """
     flat_data = []
     is_usd = currency == 'USD'
@@ -161,9 +188,16 @@ def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float)
     price_header = 'Цена дна, за м²' + currency_suffix
     expected_header = 'Ожидаемые поступления' + currency_suffix
 
-    for complex_name, prop_types_data in summary_data.items():
+    for key, prop_types_data in summary_data.items():
+        # Определяем ключи
+        if isinstance(key, tuple):
+            complex_name, house_name = key
+        else:
+            complex_name = key
+            house_name = "-"
+
         for prop_type, metrics in prop_types_data.items():
-            flat_data.append({
+            row = {
                 'Проект': complex_name,
                 'Тип недвижимости': prop_type,
                 'Остаток, шт.': metrics['units'],
@@ -171,12 +205,23 @@ def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float)
                 value_header: metrics['total_value'] / rate,
                 price_header: metrics['avg_price_m2'] / rate,
                 expected_header: metrics.get('expected_income', 0) / rate
-            })
+            }
+            # Если есть данные по дому, добавляем в строку
+            if house_name != "-":
+                row['Дом'] = house_name
+            flat_data.append(row)
 
     if not flat_data:
         return None
 
     df = pd.DataFrame(flat_data)
+
+    # Упорядочиваем колонки, чтобы Дом был после Проекта
+    cols = list(df.columns)
+    if 'Дом' in cols:
+        cols.insert(1, cols.pop(cols.index('Дом')))
+        df = df[cols]
+
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Сводка по остаткам', startrow=1, header=False)
@@ -196,14 +241,26 @@ def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float)
 
         current_money_format = money_format_usd if is_usd else money_format_uzs
 
-        # Настройка ширины колонок
-        worksheet.set_column(0, 0, 25, default_format)  # Проект
-        worksheet.set_column(1, 1, 25, default_format)  # Тип
-        worksheet.set_column(2, 2, 15, integer_format)  # Остаток шт
-        worksheet.set_column(3, 3, 15, area_format)  # Остаток м2
-        worksheet.set_column(4, 4, 30, current_money_format)  # Стоимость
-        worksheet.set_column(5, 5, 25, current_money_format)  # Цена м2
-        worksheet.set_column(6, 6, 30, current_money_format)  # Ожидаемые поступления (новый столбец)
+        # Настройка ширины колонок (с учетом сдвига из-за новой колонки)
+        col_idx = 0
+        worksheet.set_column(col_idx, col_idx, 25, default_format)  # Проект
+        col_idx += 1
+
+        if 'Дом' in df.columns:
+            worksheet.set_column(col_idx, col_idx, 15, default_format)  # Дом
+            col_idx += 1
+
+        worksheet.set_column(col_idx, col_idx, 25, default_format)  # Тип
+        col_idx += 1
+        worksheet.set_column(col_idx, col_idx, 15, integer_format)  # Остаток шт
+        col_idx += 1
+        worksheet.set_column(col_idx, col_idx, 15, area_format)  # Остаток м2
+        col_idx += 1
+        worksheet.set_column(col_idx, col_idx, 30, current_money_format)  # Стоимость
+        col_idx += 1
+        worksheet.set_column(col_idx, col_idx, 25, current_money_format)  # Цена м2
+        col_idx += 1
+        worksheet.set_column(col_idx, col_idx, 30, current_money_format)  # Ожидаемые
 
     output.seek(0)
     return output

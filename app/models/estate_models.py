@@ -16,6 +16,7 @@ class EstateDeal(db.Model):
     estate_sell_id = db.Column(db.Integer, db.ForeignKey('estate_sells.id'), nullable=False)
     date_modified = db.Column(db.Date, nullable=True)
     deal_status_name = db.Column(db.String(100))
+    agreement_number = db.Column(db.String(100), nullable=True)
 
     # --- ВОТ ИСПРАВЛЕНИЕ: ДОБАВЛЕНО ПОЛЕ ---
     deal_program_name = db.Column(db.String(255), nullable=True)
@@ -24,7 +25,7 @@ class EstateDeal(db.Model):
     agreement_date = db.Column(db.Date, nullable=True)
     preliminary_date = db.Column(db.Date, nullable=True)
     deal_sum = db.Column(db.Float, nullable=True)
-
+    arles_agreement_num = db.Column(db.String(100), nullable=True)
     sell = db.relationship('EstateSell')
 
     # --- ИСПРАВЛЕНИЕ 1: ForeignKey должен указывать на 'users.id' ---
@@ -70,6 +71,9 @@ class EstateSell(db.Model):
     estate_sell_status_name = db.Column(db.String(100), nullable=True)
     estate_price = db.Column(db.Float, nullable=True)
     estate_area = db.Column(db.Float, nullable=True)
+
+    geo_house_entrance = db.Column(db.Integer, nullable=True)  # Подъезд
+    geo_flatnum = db.Column(db.String(50), nullable=True)  # Номер помещения
 
     finance_operations = db.relationship('FinanceOperation', back_populates='sell', cascade="all, delete-orphan")
     house = db.relationship('EstateHouse', back_populates='sells')

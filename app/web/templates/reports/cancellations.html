@@ -1,0 +1,98 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Реестр расторжений</h1>
+</div>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-body">
+        <form action="{{ url_for('cancellations.add') }}" method="POST" class="row g-3 align-items-end">
+            <div class="col-auto">
+                <label class="form-label fw-bold">Добавить ID Объекта</label>
+                <input type="number" name="sell_id" class="form-control" placeholder="Например: 12345" required>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-plus-circle"></i> Внести в реестр
+                </button>
+            </div>
+            <div class="col-auto text-muted small pb-2">
+                Дата расторжения установится автоматически (сегодня).
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-bordered table-hover table-sm align-middle" style="font-size: 0.9rem;">
+        <thead class="table-light text-center align-middle">
+            <tr>
+                <th rowspan="2">ID</th>
+                <th colspan="3">Локация</th>
+                <th colspan="4">Характеристики</th>
+                <th colspan="3">Договор</th>
+                <th rowspan="2">Дата<br>расторжения</th>
+                <th rowspan="2">Действия</th>
+            </tr>
+            <tr>
+                <th>ЖК</th>
+                <th>Дом</th>
+                <th>Подъезд</th>
+
+                <th>№ Пом.</th>
+                <th>Тип</th>
+                <th>Комн.</th>
+                <th>Этаж / Площадь</th>
+
+                <th>Номер</th>
+                <th>Дата</th>
+                <th>Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if data %}
+                {% for item in data %}
+                <tr>
+                    <td class="text-center fw-bold">
+                        <a href="{{ url_for('main.apartment_details', sell_id=item.sell_id) }}" target="_blank" class="text-decoration-none">
+                            {{ item.sell_id }} <i class="bi bi-box-arrow-up-right" style="font-size: 0.7rem;"></i>
+                        </a>
+                    </td>
+
+                    <td>{{ item.complex }}</td>
+                    <td>{{ item.house }}</td>
+                    <td class="text-center">{{ item.entrance }}</td>
+
+                    <td class="text-center fw-bold">{{ item.number }}</td>
+                    <td>{{ item.type }}</td>
+                    <td class="text-center">{{ item.rooms }}</td>
+                    <td class="text-center text-nowrap">{{ item.floor }} эт. / {{ item.area }} м²</td>
+
+                    <td class="text-center">{{ item.contract_number }}</td>
+                    <td class="text-center">{{ item.contract_date }}</td>
+                    <td class="text-end text-nowrap">{{ "{:,.0f}".format(item.contract_sum).replace(',', ' ') }}</td>
+
+                    <td class="text-center text-danger fw-bold">{{ item.cancellation_date }}</td>
+
+                    <td class="text-center">
+                        <form action="{{ url_for('cancellations.delete', id=item.registry_id) }}" method="POST" onsubmit="return confirm('Вы действительно хотите удалить эту запись из реестра расторжений?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger border-0" title="Удалить запись">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="13" class="text-center text-muted py-5">
+                        <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+                        Нет записей о расторжениях
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

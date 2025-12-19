@@ -99,7 +99,8 @@ def export_expected_income_details():
 @login_required
 @permission_required('view_inventory_report')
 def inventory_summary():
-    summary_by_complex, overall_summary = inventory_service.get_inventory_summary_data()
+    # Изменено: распаковываем 3 значения, игнорируем summary_by_house для веб-вью
+    summary_by_complex, overall_summary, _ = inventory_service.get_inventory_summary_data()
     usd_rate = currency_service.get_current_effective_rate()
     return render_template(
         'reports/inventory_summary.html',
@@ -116,8 +117,13 @@ def inventory_summary():
 def export_inventory_summary():
     selected_currency = request.args.get('currency', 'UZS')
     usd_rate = currency_service.get_current_effective_rate()
-    summary_by_complex, _ = inventory_service.get_inventory_summary_data()
-    excel_stream = inventory_service.generate_inventory_excel(summary_by_complex, selected_currency, usd_rate)
+
+    # Изменено: получаем summary_by_house
+    _, _, summary_by_house = inventory_service.get_inventory_summary_data()
+
+    # Изменено: передаем summary_by_house в генератор excel
+    excel_stream = inventory_service.generate_inventory_excel(summary_by_house, selected_currency, usd_rate)
+
     if excel_stream is None:
         flash("Нет данных для экспорта.", "warning")
         return redirect(url_for('report.inventory_summary'))

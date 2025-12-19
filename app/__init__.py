@@ -10,7 +10,7 @@ from .web.obligations_routes import obligations_bp
 from .core.config import DevelopmentConfig
 from .core.extensions import db
 from .core.db_utils import get_default_session
-from decimal import Decimal # <-- УБЕДИТЕСЬ, ЧТО ЭТОТ ИМПОРТ ЕСТЬ
+from decimal import Decimal
 from sqlalchemy.orm import joinedload
 from app.core.extensions import db, migrate_default, migrate_planning, login_manager
 
@@ -21,16 +21,15 @@ login_manager.login_message = "Пожалуйста, войдите в сист�
 login_manager.login_message_category = "info"
 babel = Babel()
 
+
 # 2. Пользовательский кодировщик для JSON
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         try:
             if isinstance(obj, (date, datetime)):
                 return obj.isoformat()
-            # --- ИСПРАВЛЕНИЕ: Добавляем обработку Decimal ---
             elif isinstance(obj, Decimal):
                 return float(obj)
-            # ----------------------------------------------
             iterable = iter(obj)
         except TypeError:
             pass
@@ -38,12 +37,11 @@ class CustomJSONEncoder(json.JSONEncoder):
             return list(iterable)
         return json.JSONEncoder.default(self, obj)
 
-# 3. Функция для выбора языка (определяется до create_app)
+
+# 3. Функция для выбора языка
 def select_locale():
-    # Пытаемся получить язык из сессии
     if 'language' in session and session['language'] in current_app.config['LANGUAGES'].keys():
         return session['language']
-    # Если нет, используем лучший вариант на основе заголовков запроса
     return request.accept_languages.best_match(current_app.config['LANGUAGES'].keys())
 
 
@@ -61,27 +59,23 @@ def create_app(config_class=DevelopmentConfig):
     # Инициализация всех расширений
     CORS(app)
     db.init_app(app)
-    # 1. Миграции для 'main_app.db' (пользователи, роли и т.д.)
-    # (Предполагаем, что старая папка 'migrations' будет переименована в 'migrations_default')
+
+    # Миграции
     migrate_default.init_app(app, db, directory='migrations_default',
-                             # Включаем только модели БЕЗ bind_key
                              include_symbol=lambda name, table: table.info.get('bind_key') is None)
 
-    # 2. Миграции для 'planning.db' (паспорта, конкуренты и т.д.)
     migrate_planning.init_app(app, db, directory='migrations_planning',
-                              # Включаем только модели с bind_key == 'planning_db'
                               include_symbol=lambda name, table: table.info.get('bind_key') == 'planning_db')
     login_manager.init_app(app)
     babel.init_app(app, locale_selector=select_locale)
     app.json_encoder = CustomJSONEncoder
 
-    # --- НОВОЕ: РЕГИСТРАЦИЯ КАСТОМНОГО ФИЛЬТРА 'fromjson' ---
+    # Кастомный фильтр
     def fromjson_filter(value):
         return json.loads(value)
-    app.jinja_env.filters['fromjson'] = fromjson_filter
-    # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
-    # Создание директории instance, если ее нет
+    app.jinja_env.filters['fromjson'] = fromjson_filter
+
     try:
         os.makedirs(app.instance_path, exist_ok=True)
     except OSError as e:
@@ -89,7 +83,8 @@ def create_app(config_class=DevelopmentConfig):
 
     with app.app_context():
         # Импорт моделей
-        from .models import auth_models, planning_models, estate_models, finance_models, exclusion_models, funnel_models, special_offer_models
+        from .models import auth_models, planning_models, estate_models, finance_models, exclusion_models, \
+            funnel_models, special_offer_models, registry_models
 
         # Регистрация Blueprints
         from .web.main_routes import main_bp
@@ -102,6 +97,11 @@ def create_app(config_class=DevelopmentConfig):
         from .web.special_offer_routes import special_offer_bp
         from .web.manager_analytics_routes import manager_analytics_bp
 
+        # --- НОВЫЕ ИМПОРТЫ ---
+        from .web.registry_routes import registry_bp  # Для реестра спец. сделок
+        from .web.cancellation_routes import cancellation_bp  # Для реестра расторжений
+        # ---------------------
+
         app.register_blueprint(report_bp, url_prefix='/reports')
         app.register_blueprint(main_bp)
         app.register_blueprint(auth_bp)
@@ -112,19 +112,23 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(special_offer_bp, url_prefix='/specials')
         app.register_blueprint(manager_analytics_bp, url_prefix='/manager-analytics')
         app.register_blueprint(obligations_bp)
+
+        # --- РЕГИСТРАЦИЯ НОВЫХ BLUEPRINTS ---
+        app.register_blueprint(registry_bp)
+        app.register_blueprint(cancellation_bp)
+
+        # ------------------------------------
+
         # Загрузчик пользователя для Flask-Login
         @login_manager.user_loader
         def load_user(user_id):
-            default_session = get_default_session()  # <--- ДОБАВЛЕНО
+            default_session = get_default_session()
             return default_session.query(auth_models.User).options(
                 joinedload(auth_models.User.role)
             ).get(int(user_id))
 
-        # Добавление задачи в планировщик
-
-    # Единая функция, выполняемая перед каждым запросом
     @app.before_request
     def before_request_tasks():
-        # Установка языка для шаблонов
         g.lang = str(select_locale())
+
     return app
