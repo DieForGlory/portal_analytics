@@ -330,6 +330,26 @@ def currency_settings():
     return render_template('settings/currency_settings.html', settings=settings, title="Настройки курса валют")
 
 
+@report_bp.route('/export-annual-plan-fact')
+@login_required
+@permission_required('view_plan_fact_report')
+def export_annual_plan_fact():
+    year = request.args.get('year', date.today().year, type=int)
+
+    # Вызываем функцию генерации из сервиса
+    excel_stream = report_service.generate_annual_report_excel(year)
+
+    if excel_stream is None:
+        flash("Не удалось сгенерировать годовой отчет.", "danger")
+        return redirect(url_for('report.plan_fact_report'))
+
+    filename = f"Annual_Report_{year}.xlsx"
+    return send_file(
+        excel_stream,
+        download_name=filename,
+        as_attachment=True,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 @report_bp.route('/export-plan-fact')
 @login_required
 @permission_required('view_plan_fact_report')

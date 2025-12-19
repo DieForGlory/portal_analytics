@@ -627,6 +627,120 @@ def get_sales_pace_comparison_data():
         }
     }
 
+
+def generate_annual_report_excel(year: int):
+    """
+    Генерирует годовой отчет в Excel с тремя листами:
+    1. Свод по месяцам (Итого)
+    2. Детализация по проектам (за каждый месяц)
+    3. Детализация по типам недвижимости (за каждый месяц)
+    """
+    all_projects_rows = []
+    all_types_rows = []
+    all_months_rows = []
+
+    # Проходим по всем месяцам года
+    for month in range(1, 13):
+        # 1. Данные по проектам (используем 'All' для всех типов недвижимости внутри проекта)
+        proj_data, totals, _ = generate_plan_fact_report(year, month, 'All')
+
+        # Обработка данных по проектам
+        for row in proj_data:
+            r = row.copy()
+            r['month'] = month
+            # Извлекаем сумму из словаря expected_income, если это словарь
+            if isinstance(r.get('expected_income'), dict):
+                r['expected_income'] = r['expected_income'].get('sum', 0)
+            all_projects_rows.append(r)
+
+        # 2. Данные по типам недвижимости
+        type_data = get_monthly_summary_by_property_type(year, month)
+        for row in type_data:
+            r = row.copy()
+            r['month'] = month
+            # Извлекаем сумму из total_expected_income
+            if isinstance(r.get('total_expected_income'), dict):
+                r['expected_income'] = r['total_expected_income'].get('sum', 0)
+            else:
+                r['expected_income'] = 0
+            # Удаляем сложный объект, чтобы не мешал созданию DF
+            if 'total_expected_income' in r:
+                del r['total_expected_income']
+            all_types_rows.append(r)
+
+        # 3. Общие итоги за месяц
+        t = totals.copy()
+        t['month'] = month
+        # totals['expected_income'] обычно float, но на всякий случай проверим
+        if isinstance(t.get('expected_income'), dict):
+            t['expected_income'] = t['expected_income'].get('sum', 0)
+        # Удаляем список ID, он не нужен в Excel
+        if 'expected_income_ids' in t:
+            del t['expected_income_ids']
+        all_months_rows.append(t)
+
+    # --- Формируем DataFrame ---
+
+    # Лист 1: Свод по месяцам
+    df_months = pd.DataFrame(all_months_rows)
+    month_cols_map = {
+        'month': 'Месяц',
+        'plan_units': 'План (шт)', 'fact_units': 'Факт (шт)', 'percent_fact_units': '% Вып. (шт)',
+        'plan_volume': 'План (контрактация)', 'fact_volume': 'Факт (контрактация)',
+        'percent_fact_volume': '% Вып. (контр.)',
+        'plan_income': 'План (поступления)', 'fact_income': 'Факт (поступления)',
+        'percent_fact_income': '% Вып. (пост.)',
+        'expected_income': 'Ожидаемые поступления'
+    }
+    # Оставляем только существующие колонки
+    avail_cols = [c for c in month_cols_map.keys() if c in df_months.columns]
+    df_months = df_months[avail_cols].rename(columns=month_cols_map)
+
+    # Лист 2: По проектам
+    df_projects = pd.DataFrame(all_projects_rows)
+    proj_cols_map = {
+        'month': 'Месяц',
+        'complex_name': 'Проект',
+        'plan_units': 'План (шт)', 'fact_units': 'Факт (шт)', 'percent_fact_units': '% Вып. (шт)',
+        'plan_volume': 'План (контрактация)', 'fact_volume': 'Факт (контрактация)',
+        'percent_fact_volume': '% Вып. (контр.)',
+        'plan_income': 'План (поступления)', 'fact_income': 'Факт (поступления)',
+        'percent_fact_income': '% Вып. (пост.)',
+        'expected_income': 'Ожидаемые поступления'
+    }
+    avail_cols = [c for c in proj_cols_map.keys() if c in df_projects.columns]
+    # Сортируем: сначала месяц, потом имя проекта
+    if 'complex_name' in df_projects.columns:
+        df_projects.sort_values(by=['month', 'complex_name'], inplace=True)
+    df_projects = df_projects[avail_cols].rename(columns=proj_cols_map)
+
+    # Лист 3: По типам недвижимости
+    df_types = pd.DataFrame(all_types_rows)
+    type_cols_map = {
+        'month': 'Месяц',
+        'property_type': 'Тип недвижимости',
+        'total_plan_units': 'План (шт)', 'total_fact_units': 'Факт (шт)', 'percent_fact_units': '% Вып. (шт)',
+        'total_plan_volume': 'План (контрактация)', 'total_fact_volume': 'Факт (контрактация)',
+        'percent_fact_volume': '% Вып. (контр.)',
+        'total_plan_income': 'План (поступления)', 'total_fact_income': 'Факт (поступления)',
+        'percent_fact_income': '% Вып. (пост.)',
+        'expected_income': 'Ожидаемые поступления'
+    }
+    avail_cols = [c for c in type_cols_map.keys() if c in df_types.columns]
+    if 'property_type' in df_types.columns:
+        df_types.sort_values(by=['month', 'property_type'], inplace=True)
+    df_types = df_types[avail_cols].rename(columns=type_cols_map)
+
+    # Запись в Excel
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_months.to_excel(writer, sheet_name='Свод по месяцам', index=False)
+        df_projects.to_excel(writer, sheet_name='По проектам', index=False)
+        df_types.to_excel(writer, sheet_name='По типам', index=False)
+
+    output.seek(0)
+    return output
+
 def calculate_grand_totals(year, month):
     """
     Рассчитывает общие итоговые показатели, включая ID для ссылок.
