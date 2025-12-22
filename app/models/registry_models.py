@@ -35,10 +35,13 @@ class CancellationRegistry(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     estate_sell_id = db.Column(db.Integer, nullable=False, unique=True, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)  # Дата расторжения
-
-    # Можно добавить причину или комментарий
+    created_at = db.Column(db.DateTime, default=datetime.now)
     comment = db.Column(db.String(255), nullable=True)
+
+    # Новые поля для ручного заполнения пустот
+    manual_number = db.Column(db.String(64), nullable=True)  # Номер договора
+    manual_date = db.Column(db.Date, nullable=True)          # Дата договора
+    manual_sum = db.Column(db.Float, nullable=True)          # Сумма
 
     def __repr__(self):
         return f"<Cancellation {self.estate_sell_id}>"

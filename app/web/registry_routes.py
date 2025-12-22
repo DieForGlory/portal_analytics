@@ -11,7 +11,7 @@ registry_bp = Blueprint('registry', __name__, template_folder='templates')
 
 @registry_bp.route('/deals-registry')
 @login_required
-@permission_required('view_plan_fact_report')  # Можно создать отдельное право, если нужно
+@permission_required('manage_registry') # Можно создать отдельное право, если нужно
 def index():
     # Загружаем данные для всех вкладок сразу или можно через AJAX (сейчас сделаем сразу для простоты)
     data = {
@@ -25,6 +25,7 @@ def index():
 
 
 @registry_bp.route('/deals-registry/add', methods=['POST'])
+@permission_required('manage_registry')
 @login_required
 def add_deal():
     sell_id = request.form.get('sell_id', type=int)
@@ -50,6 +51,7 @@ def add_deal():
 
 
 @registry_bp.route('/deals-registry/delete/<int:id>', methods=['POST'])
+@permission_required('manage_registry')
 @login_required
 def delete_deal(id):
     if registry_service.remove_from_registry(id):

@@ -12,7 +12,8 @@ class Permission:
     MANAGE_DISCOUNTS = 0x04
     UPLOAD_DATA = 0x08
     VIEW_REPORTS = 0x10
-
+    MANAGE_CANCELLATIONS = 0x20
+    MANAGE_REGISTRY = 0x40
 
 class Role(db.Model):
     __tablename__ = 'roles'
