@@ -38,10 +38,25 @@ class CancellationRegistry(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now)
     comment = db.Column(db.String(255), nullable=True)
 
-    # Новые поля для ручного заполнения пустот
-    manual_number = db.Column(db.String(64), nullable=True)  # Номер договора
-    manual_date = db.Column(db.Date, nullable=True)          # Дата договора
-    manual_sum = db.Column(db.Float, nullable=True)          # Сумма
+    # Поля для "замороженных" данных из MySQL
+    complex_name = db.Column(db.String(255))
+    house_name = db.Column(db.String(255))
+    entrance = db.Column(db.String(50))
+    number = db.Column(db.String(50))
+    cat_type = db.Column(db.String(100))
+    floor = db.Column(db.String(50))
+    rooms = db.Column(db.String(50))
+    area = db.Column(db.Float)
+
+    # Данные договора на момент расторжения
+    contract_number = db.Column(db.String(100))
+    contract_date = db.Column(db.Date)
+    contract_sum = db.Column(db.Float)
+
+    # Поля ручной корректировки
+    manual_number = db.Column(db.String(64), nullable=True)
+    manual_date = db.Column(db.Date, nullable=True)
+    manual_sum = db.Column(db.Float, nullable=True)
 
     def __repr__(self):
         return f"<Cancellation {self.estate_sell_id}>"

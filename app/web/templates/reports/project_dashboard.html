@@ -86,6 +86,9 @@
   <li class="nav-item" role="presentation">
     <button class="nav-link" id="houses-tab" data-bs-toggle="tab" data-bs-target="#houses-pane" type="button" role="tab">{{ _('По домам') }}</button>
   </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="pricelist-tab" data-bs-toggle="tab" data-bs-target="#pricelist-pane" type="button" role="tab">{{ _('Создание прайс-листа') }}</button>
+  </li>
 </ul>
 
 <div class="tab-content" id="projectDashboardTabContent">
@@ -320,7 +323,47 @@
             </div>
           {% endfor %}
         </div>
-      </div>
+  </div>
+
+  <div class="tab-pane fade" id="pricelist-pane" role="tabpanel">
+    <div class="card card-glass">
+        <div class="card-body">
+            <h5 class="card-title mb-4">{{ _('Переоценка и создание прайс-листа') }}</h5>
+            <p class="text-muted small mb-4">
+                {{ _('Алгоритм: (Цена - 3 млн) × (1 - МПП - РОП - КД) ÷ S → Цена дна → Повышение %% → Возврат скидок → +3 млн.') }}
+            </p>
+            <form action="{{ url_for('report.generate_pricelist_files', complex_name=data.complex_name) }}" method="POST">
+                <div class="row g-4 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">{{ _('Тип недвижимости') }}</label>
+                        <select name="property_type" class="form-select" required>
+                            {% for pt in property_types %}
+                            <option value="{{ pt }}">{{ _(pt) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">{{ _('Повышение/Понижение (%%)') }}</label>
+                        <div class="input-group">
+                            <input type="number" name="percent" step="0.01" class="form-control" placeholder="Напр. 5.5" required>
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="d-flex gap-2">
+                            <button type="submit" name="format" value="excel" class="btn btn-success flex-grow-1 py-2">
+                                <i class="bi bi-file-earmark-excel me-2"></i>{{ _('Скачать Excel') }}
+                            </button>
+                            <button type="submit" name="format" value="pptx" class="btn btn-primary flex-grow-1 py-2">
+                                <i class="bi bi-file-earmark-ppt me-2"></i>{{ _('Скачать презентацию') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+  </div>
 
 </div>
 
@@ -333,28 +376,17 @@
     document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 12650 }}";
     const charts_json_data = JSON.parse('{{ charts_json|safe }}');
 
-    // --- ОБНОВЛЕННЫЙ БЛОК ПЕРЕВОДОВ ---
     window.i18n = {
-        // Для вкладки "Динамика"
         plan_contracting: "{{ _('План контрактации') }}",
         fact_contracting: "{{ _('Факт контрактации') }}",
         plan_income: "{{ _('План поступлений') }}",
         fact_income: "{{ _('Факт поступлений') }}",
-
-        // Для вкладки "Анализ спроса"
         units_sold: "{{ _('Продано квартир, шт.') }}",
-
-        // Для вкладки "Анализ цен"
         avg_price: "{{ _('Средняя цена за м²') }}",
-
-        // Для вкладки "Структура продаж"
         no_payment_data: "{{ _('Нет данных по типам оплаты.') }}",
         no_pace_data: "{{ _('Нет данных для расчета темпа продаж.') }}",
         quarterly_pace: "{{ _('Средний темп за квартал') }}"
     };
-
-    // Данные для JS (если они есть)
-    // (Удалены старые window.riserAnalysisData и window.riserFilterOptions)
 </script>
 <script src="{{ url_for('static', filename='js/report_script.js') }}"></script>
 <script src="{{ url_for('static', filename='js/project_dashboard_script.js') }}"></script>

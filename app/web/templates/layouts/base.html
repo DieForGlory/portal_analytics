@@ -48,13 +48,6 @@
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'discount.discounts_overview' %}active{% endif %}" href="{{ url_for('discount.discounts_overview') }}">{{ _('Система скидок') }}</a>
                             </li>
-                            {% if current_user.can('view_selection') %}
-                            <li class="nav-item">
-                                <a class="nav-link {% if request.endpoint == 'main.monthly_specials_list' %}active{% endif %}" href="{{ url_for('main.monthly_specials_list') }}">
-                                    <i class="bi bi-star-fill text-warning"></i> {{ _('Квартиры месяца') }}
-                                </a>
-                            </li>
-                            {% endif %}
 
                             {% if current_user.can('view_plan_fact_report') %}
                             <li class="nav-item dropdown">
@@ -65,7 +58,7 @@
                                     <li><a class="dropdown-item" href="{{ url_for('report.plan_fact_report') }}">{{ _('План-факт отчет') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.inventory_summary') }}">{{ _('Сводка по остаткам') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_funnel') }}">{{ _('Воронка продаж') }}</a></li>
-
+                                    <li><a class="dropdown-item" href="{{ url_for('report.quarterly_analytics') }}">{{ _('Квартальная аналитика') }}</a></li>
                                     {# --- ДОБАВЛЕНО: Ссылка на новый отчет --- #}
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_pace_report') }}">{{ _('Темпы продаж (Сравнение)') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('registry.index') }}">{{ _('Реестр спец. сделок') }}</a></li>
@@ -77,7 +70,11 @@
                                 </ul>
                             </li>
                             {% endif %}
-
+                            <li class="nav-item">
+                                <a class="nav-link {{ 'active' if request.endpoint == 'competitor.map_view' }}" href="{{ url_for('competitor.map_view') }}">
+                                    <i class="bi bi-geo-alt me-1"></i>Конкуренты
+                                </a>
+                            </li>
                             {% if current_user.can('manage_discounts') or current_user.can('manage_users') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle {% if request.blueprint in ['auth', 'settings'] or request.endpoint in ['discount.versions_index', 'discount.upload_discounts', 'report.upload_plan'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">

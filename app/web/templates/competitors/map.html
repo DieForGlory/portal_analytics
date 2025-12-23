@@ -1,0 +1,37 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="row g-0" style="height: calc(100vh - 100px);">
+    <div class="col-md-3 border-end bg-light p-3 overflow-auto">
+        <h5>{{ _('Сравнение с конкурентом') }}</h5>
+        <select id="ourProject" class="form-select mb-3">
+            {% for p in projects %}
+            <option value="{{ p }}">{{ p }}</option>
+            {% endfor %}
+        </select>
+        <div id="comparisonDetails">
+            <p class="text-muted">{{ _('Выберите маркер на карте') }}</p>
+        </div>
+    </div>
+    <div class="col-md-9">
+        <div id="competitorMap" style="height: 100%;"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script>
+    var map = L.map('competitorMap').setView([41.31, 69.24], 12); // Ташкент
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    {% for c in competitors %}
+    L.marker([{{ c.lat }}, {{ c.lng }}]).addTo(map)
+        .on('click', function() {
+            var project = document.getElementById('ourProject').value;
+            fetch(`/competitors/compare/{{ c.id }}?our_project=` + encodeURIComponent(project))
+                .then(r => r.text())
+                .then(html => document.getElementById('comparisonDetails').innerHTML = html);
+        });
+    {% endfor %}
+</script>
+{% endblock %}

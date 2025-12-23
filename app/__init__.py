@@ -13,7 +13,7 @@ from .core.db_utils import get_default_session
 from decimal import Decimal
 from sqlalchemy.orm import joinedload
 from app.core.extensions import db, migrate_default, migrate_planning, login_manager
-
+from app.web.competitor_routes import competitor_bp
 # 1. Инициализация расширений
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
@@ -112,7 +112,7 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(special_offer_bp, url_prefix='/specials')
         app.register_blueprint(manager_analytics_bp, url_prefix='/manager-analytics')
         app.register_blueprint(obligations_bp)
-
+        app.register_blueprint(competitor_bp)
         # --- РЕГИСТРАЦИЯ НОВЫХ BLUEPRINTS ---
         app.register_blueprint(registry_bp)
         app.register_blueprint(cancellation_bp)

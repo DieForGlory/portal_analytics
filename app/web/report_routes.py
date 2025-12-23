@@ -2,6 +2,7 @@
 import json
 import os
 import io
+from app.services import quarterly_report_service, data_service
 from datetime import date, timedelta  # Убедитесь, что date импортирован
 from datetime import datetime
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
@@ -22,7 +23,9 @@ from app.services import (
     manager_report_service,
     funnel_service,
     obligation_service,
-    project_dashboard_service  # <-- 1. ДОБАВЛЕН ИМПОРТ НОВОГО СЕРВИСА
+    project_dashboard_service,
+    pricelist_service,
+    presentation_service
 )
 from app.web.forms import UploadPlanForm, UploadManagerPlanForm
 from ..models.finance_models import FinanceOperation
@@ -135,6 +138,61 @@ def export_inventory_summary():
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
+
+@report_bp.route('/reports/quarterly-analytics')
+@login_required
+@permission_required('view_plan_fact_report')
+def quarterly_analytics():
+    complexes = data_service.get_all_complex_names()
+    if not complexes:
+        flash("Список проектов пуст", "warning")
+        return redirect(url_for('main.index'))
+
+    complex_name = request.args.get('complex', complexes[0])
+    year = request.args.get('year', datetime.now().year, type=int)
+    quarter = request.args.get('quarter', (datetime.now().month - 1) // 3 + 1, type=int)
+
+    usd_rate = currency_service.get_current_effective_rate()
+    data = quarterly_report_service.get_quarterly_analytics(complex_name, year, quarter)
+
+    return render_template(
+        'reports/quarterly_analytical_report.html',
+        data=data,
+        complexes=complexes,
+        selected_complex=complex_name,
+        selected_year=year,
+        selected_quarter=quarter,
+        usd_to_uzs_rate=usd_rate
+    )
+
+
+@report_bp.route('/project-dashboard/<path:complex_name>/generate-pricelist', methods=['POST'])
+@login_required
+@permission_required('view_project_dashboard')
+def generate_pricelist_files(complex_name):
+    prop_type = request.form.get('property_type')
+    percent_val = request.form.get('percent', '0').replace(',', '.')
+    percent = float(percent_val) / 100
+    file_format = request.form.get('format')
+
+    # Сервис возвращает реестр (results) и статистику для шаблонов (stats)
+    results, stats = pricelist_service.calculate_new_prices(complex_name, prop_type, percent)
+
+    if results is None:  # Обработка ошибки (например, нет версии скидок)
+        flash(stats, "warning")
+        return redirect(url_for('report.project_dashboard', complex_name=complex_name))
+
+    if file_format == 'excel':
+        # ИСПРАВЛЕНО: Добавлен аргумент stats
+        file_stream = pricelist_service.generate_pricelist_excel(results, stats)
+        filename = f"Pricelist_Full_{complex_name}_{date.today()}.xlsx"
+        mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    else:
+        file_stream = presentation_service.generate_pricelist_pptx(complex_name, prop_type, percent, stats)
+        filename = f"Pricelist_Analysis_{complex_name}.pptx"
+        mimetype = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+
+    return send_file(file_stream, download_name=filename, as_attachment=True, mimetype=mimetype)
 
 @report_bp.route('/download-plan-template')
 @login_required
