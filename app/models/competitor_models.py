@@ -8,7 +8,8 @@ class Competitor(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-
+    is_internal = db.Column(db.Boolean, default=False) # Флаг внутреннего проекта
+    description = db.Column(db.Text)
     # Координаты
     lat = db.Column(db.Float, nullable=True)
     lng = db.Column(db.Float, nullable=True)
@@ -26,8 +27,10 @@ class Competitor(db.Model):
     # Аналитические показатели
     construction_stage = db.Column(db.String(100))
     units_count = db.Column(db.Integer)
+    sold_count = db.Column(db.Integer, default=0) # Продано шт
     avg_area = db.Column(db.Float)
-    avg_price_sqm = db.Column(db.Float)
+    avg_price_sqm = db.Column(db.Float) # Средняя цена за квадратный метр остатка
+    avg_bottom_price = db.Column(db.Float) # Средняя стоимость дна остатков
 
     # Сроки
     planned_cadastre_date = db.Column(db.Date)
@@ -48,6 +51,8 @@ class Competitor(db.Model):
             'property_class': self.property_class,
             'property_type': self.property_type,
             'avg_price_sqm': self.avg_price_sqm,
+            'avg_bottom_price': self.avg_bottom_price,
+            'is_internal': self.is_internal,
             'direct_competitor': self.direct_competitor_name
         }
 
