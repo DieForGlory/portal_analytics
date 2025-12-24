@@ -4,7 +4,7 @@ from flask_login import UserMixin, AnonymousUserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.core.extensions import db
 from sqlalchemy.orm import relationship, backref
-
+from sqlalchemy.orm import joinedload, selectinload
 
 class Permission:
     MANAGE_USERS = 0x01
@@ -19,7 +19,12 @@ class Role(db.Model):
     __tablename__ = 'roles'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True)
-    permissions = db.relationship('Permission', secondary='role_permissions', back_populates='roles')
+    permissions = db.relationship(
+        'Permission',
+        secondary='role_permissions',
+        back_populates='roles',
+        lazy='joined'
+    )
     users = db.relationship('User', back_populates='role')
 
 
@@ -59,7 +64,11 @@ class User(UserMixin, db.Model):
     def can(self, perm_name):
         if self.role is None:
             return False
-        return any(p.name == perm_name for p in self.role.permissions)
+        # Если администратор — разрешаем всё автоматически
+        if self.is_admin:
+            return True
+        # Проверка прав с приведением к нижнему регистру для избежания ошибок
+        return any(p.name.lower() == perm_name.lower() for p in self.role.permissions)
 
     @property
     def is_admin(self):

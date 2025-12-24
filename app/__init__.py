@@ -2,6 +2,7 @@
 import os
 import json
 from datetime import date, datetime
+from sqlalchemy.orm import joinedload, selectinload
 from flask import Flask, request, render_template, g, session, current_app
 from flask_login import LoginManager
 from flask_cors import CORS
@@ -124,7 +125,7 @@ def create_app(config_class=DevelopmentConfig):
         def load_user(user_id):
             default_session = get_default_session()
             return default_session.query(auth_models.User).options(
-                joinedload(auth_models.User.role)
+                joinedload(auth_models.User.role).selectinload(auth_models.Role.permissions)
             ).get(int(user_id))
 
     @app.before_request

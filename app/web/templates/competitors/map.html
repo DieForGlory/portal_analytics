@@ -1,37 +1,165 @@
 {% extends "layouts/base.html" %}
 
+{% block styles %}
+<style>
+    /* Интеграция с темной темой */
+    .leaflet-container {
+        background: var(--bs-body-bg);
+    }
+    .filter-panel {
+        background-color: var(--gh-element-bg);
+        color: var(--bs-body-color);
+        border-right: 1px solid var(--bs-border-color);
+    }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+        background-color: var(--gh-element-bg);
+        color: var(--bs-body-color);
+        box-shadow: 0 3px 14px var(--gh-card-shadow);
+    }
+    .action-buttons .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
+        text-align: left;
+        display: flex;
+        align-items: center;
+    }
+    .action-buttons .bi {
+        margin-right: 10px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row g-0" style="height: calc(100vh - 100px);">
-    <div class="col-md-3 border-end bg-light p-3 overflow-auto">
-        <h5>{{ _('Сравнение с конкурентом') }}</h5>
-        <select id="ourProject" class="form-select mb-3">
+<div class="row g-0" style="height: calc(100vh - 120px); margin-top: -3rem;">
+    <div class="col-md-3 filter-panel p-3 overflow-auto">
+
+        {# --- НОВЫЙ БЛОК: Кнопки управления данными --- #}
+        <div class="action-buttons mb-4">
+            <h6 class="text-muted text-uppercase small fw-bold mb-3">{{ _('Управление данными') }}</h6>
+
+            {% if current_user.can('upload_data') %}
+            <a href="{{ url_for('competitor.import_data') }}" class="btn btn-golden-outline btn-sm">
+                <i class="bi bi-upload"></i> {{ _('Импорт из Excel') }}
+            </a>
+            {% endif %}
+
+            {% if current_user.can('view_reports') %}
+            <a href="{{ url_for('competitor.export_data') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-download"></i> {{ _('Экспорт данных') }}
+            </a>
+            {% endif %}
+        </div>
+        <hr>
+
+        <h5 class="mb-3">{{ _('Фильтры') }}</h5>
+
+        <div class="mb-3">
+            <label class="form-label small">{{ _('Поиск по названию') }}</label>
+            <input type="text" id="searchName" class="form-control form-control-sm" placeholder="Введите название...">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small">{{ _('Класс') }}</label>
+            <select id="filterClass" class="form-select form-select-sm">
+                <option value="">{{ _('Все классы') }}</option>
+                {% for class in competitors|map(attribute='property_class')|unique|reject('none') %}
+                <option value="{{ class }}">{{ class }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small">{{ _('Тип жилья') }}</label>
+            <select id="filterType" class="form-select form-select-sm">
+                <option value="">{{ _('Все типы') }}</option>
+                {% for type in competitors|map(attribute='property_type')|unique|reject('none') %}
+                <option value="{{ type }}">{{ type }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <hr>
+        <h5>{{ _('Сравнение') }}</h5>
+        <label class="form-label small">{{ _('Наш проект') }}</label>
+        <select id="ourProject" class="form-select form-select-sm mb-3">
             {% for p in projects %}
             <option value="{{ p }}">{{ p }}</option>
             {% endfor %}
         </select>
-        <div id="comparisonDetails">
-            <p class="text-muted">{{ _('Выберите маркер на карте') }}</p>
+
+        <div id="comparisonDetails" class="card p-2 border-dashed">
+            <p class="text-muted small mb-0">{{ _('Выберите маркер на карте для сравнения') }}</p>
         </div>
     </div>
+
     <div class="col-md-9">
         <div id="competitorMap" style="height: 100%;"></div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <script>
-    var map = L.map('competitorMap').setView([41.31, 69.24], 12); // Ташкент
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const competitors = [
+        {% for c in competitors %}
+        {
+            id: {{ c.id }},
+            name: "{{ c.name }}",
+            lat: {{ c.lat or 0 }},
+            lng: {{ c.lng or 0 }},
+            class: "{{ c.property_class or '' }}",
+            type: "{{ c.property_type or '' }}"
+        },
+        {% endfor %}
+    ];
 
-    {% for c in competitors %}
-    L.marker([{{ c.lat }}, {{ c.lng }}]).addTo(map)
-        .on('click', function() {
-            var project = document.getElementById('ourProject').value;
-            fetch(`/competitors/compare/{{ c.id }}?our_project=` + encodeURIComponent(project))
-                .then(r => r.text())
-                .then(html => document.getElementById('comparisonDetails').innerHTML = html);
+    const map = L.map('competitorMap').setView([41.31, 69.24], 12);
+    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Применение темного стиля карты, если включена темная тема
+    if (document.documentElement.getAttribute('data-bs-theme') === 'dark') {
+        tiles.setUrl('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png');
+    }
+
+    let markers = [];
+
+    function updateMarkers() {
+        const searchTerm = document.getElementById('searchName').value.toLowerCase();
+        const classFilter = document.getElementById('filterClass').value;
+        const typeFilter = document.getElementById('filterType').value;
+
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+
+        competitors.forEach(c => {
+            const matchesSearch = c.name.toLowerCase().includes(searchTerm);
+            const matchesClass = !classFilter || c.class === classFilter;
+            const matchesType = !typeFilter || c.type === typeFilter;
+
+            if (matchesSearch && matchesClass && matchesType && c.lat !== 0) {
+                const marker = L.marker([c.lat, c.lng])
+                    .bindPopup(`<b>${c.name}</b><br>${c.class}`)
+                    .on('click', () => loadComparison(c.id))
+                    .addTo(map);
+                markers.push(marker);
+            }
         });
-    {% endfor %}
+    }
+
+    function loadComparison(compId) {
+        const project = document.getElementById('ourProject').value;
+        fetch(`/competitors/compare/${compId}?our_project=` + encodeURIComponent(project))
+            .then(r => r.text())
+            .then(html => document.getElementById('comparisonDetails').innerHTML = html);
+    }
+
+    ['searchName', 'filterClass', 'filterType'].forEach(id => {
+        document.getElementById(id).addEventListener('input', updateMarkers);
+        document.getElementById(id).addEventListener('change', updateMarkers);
+    });
+
+    updateMarkers();
 </script>
 {% endblock %}
