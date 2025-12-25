@@ -15,6 +15,7 @@ from decimal import Decimal
 from sqlalchemy.orm import joinedload
 from app.core.extensions import db, migrate_default, migrate_planning, login_manager
 from app.web.competitor_routes import competitor_bp
+from .web.news_routes import news_bp
 # 1. Инициализация расширений
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
@@ -117,7 +118,7 @@ def create_app(config_class=DevelopmentConfig):
         # --- РЕГИСТРАЦИЯ НОВЫХ BLUEPRINTS ---
         app.register_blueprint(registry_bp)
         app.register_blueprint(cancellation_bp)
-
+        app.register_blueprint(news_bp)
         # ------------------------------------
 
         # Загрузчик пользователя для Flask-Login

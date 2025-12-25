@@ -39,8 +39,8 @@ class Competitor(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Связь с медиа
-    media = db.relationship('CompetitorMedia', backref='competitor', cascade='all, delete-orphan')
+
+    media = db.relationship('CompetitorMedia', backref='competitor', lazy='joined', cascade='all, delete-orphan')
 
     def to_dict(self):
         return {

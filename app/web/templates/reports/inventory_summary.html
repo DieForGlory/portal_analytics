@@ -33,9 +33,23 @@
             <input class="form-check-input" type="checkbox" role="switch" id="currencyToggle">
             <label class="form-check-label" for="currencyToggle" id="currencyLabel">UZS</label>
         </div>
-        <a id="export-link" data-base-url="{{ url_for('report.export_inventory_summary') }}" href="{{ url_for('report.export_inventory_summary') }}" class="btn btn-outline-success">
-            <i class="bi bi-file-earmark-excel me-1"></i>{{ _('Экспорт в Excel') }}
-        </a>
+        <div class="d-flex align-items-center gap-3">
+            <select id="groupBySelect" class="form-select form-select-sm" style="width: auto;">
+                <option value="complex">{{ _('Только по ЖК') }}</option>
+                <option value="house" selected>{{ _('По ЖК и домам') }}</option>
+            </select>
+
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="currencyToggle">
+                <label class="form-check-label" for="currencyToggle" id="currencyLabel">UZS</label>
+            </div>
+            <a id="export-link"
+               data-base-url="{{ url_for('report.export_inventory_summary') }}"
+               href="{{ url_for('report.export_inventory_summary', group_by='house') }}"
+               class="btn btn-outline-success">
+                <i class="bi bi-file-earmark-excel me-1"></i>{{ _('Экспорт в Excel') }}
+            </a>
+        </div>
     </div>
 </div>
 
@@ -126,7 +140,24 @@
 {% block scripts %}
 {{ super() }}
 <script>
-    document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 13000 }}";
+    document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 12000 }}";
+    const exportLink = document.getElementById('export-link');
+    const groupBySelect = document.getElementById('groupBySelect');
+    const currencyToggle = document.getElementById('currencyToggle');
+
+    function updateExportUrl() {
+        const baseUrl = exportLink.dataset.baseUrl;
+        const currency = currencyToggle.checked ? 'USD' : 'UZS';
+        const groupBy = groupBySelect.value;
+        // Обновляем href с учетом обоих параметров
+        exportLink.href = `${baseUrl}?currency=${currency}&group_by=${groupBy}`;
+    }
+
+    groupBySelect.addEventListener('change', updateExportUrl);
+    currencyToggle.addEventListener('change', updateExportUrl);
+
+    // Вызвать при загрузке для инициализации
+    updateExportUrl();
 </script>
 <script src="{{ url_for('static', filename='js/report_script.js') }}"></script>
 {% endblock %}

@@ -262,15 +262,6 @@ def save_media(comp_id, file):
     db.session.commit()
 
 
-def delete_media(media_id):
-    media = CompetitorMedia.query.get(media_id)
-    if media:
-        full_path = os.path.join(current_app.static_folder, media.file_path)
-        if os.path.exists(full_path):
-            os.remove(full_path)
-        db.session.delete(media)
-        db.session.commit()
-
 def _to_excel(data, columns, sheet):
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine='xlsxwriter') as w:

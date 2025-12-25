@@ -69,6 +69,16 @@ def compare(comp_id):
         return "<div class='alert alert-warning small p-2 mb-0'>Выберите конкурента на карте.</div>"
     return render_template('competitors/_comparison_card.html', data=data)
 
+@competitor_bp.route('/competitors/media/<int:media_id>/delete')
+@login_required
+def delete_media(media_id):
+    media = competitor_service.get_media_by_id(media_id)
+    if media:
+        comp_id = media.competitor_id
+        competitor_service.delete_media(media_id)
+        flash('Файл удален', 'success')
+        return redirect(url_for('competitor.competitor_profile', comp_id=comp_id))
+    return redirect(url_for('competitor.map_view'))
 
 @competitor_bp.route('/competitors/<int:comp_id>')
 @login_required

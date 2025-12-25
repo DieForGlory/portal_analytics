@@ -70,10 +70,22 @@
                                 </ul>
                             </li>
                             {% endif %}
-                            <li class="nav-item">
-                                <a class="nav-link {{ 'active' if request.endpoint == 'competitor.map_view' }}" href="{{ url_for('competitor.map_view') }}">
-                                    <i class="bi bi-geo-alt me-1"></i>Конкуренты
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="navbarMarket" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Рынок
                                 </a>
+                                <ul class="dropdown-menu" aria-labelledby="navbarMarket">
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('competitor.map_view') }}">
+                                            Конкуренты
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('news.feed') }}">
+                                            Новости рынка
+                                        </a>
+                                    </li>
+                                </ul>
                             </li>
                             {% if current_user.can('manage_discounts') or current_user.can('manage_users') %}
                             <li class="nav-item dropdown">
