@@ -13,6 +13,34 @@ class PropertyType(enum.Enum):
     STORAGEROOM = 'Кладовое помещение'
 
 
+class ProjectFinancialTarget(db.Model):
+    """Глобальные финансовые цели ЖК"""
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'project_financial_targets'
+
+    complex_name = db.Column(db.String(255), db.ForeignKey('project_passports.complex_name'), primary_key=True)
+    total_construction_budget = db.Column(db.Float, nullable=False, default=0.0)
+    target_margin_percent = db.Column(db.Float, nullable=False, default=20.0)
+    estimated_other_costs = db.Column(db.Float, nullable=False, default=0.0)
+
+    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+
+
+class MonthlyCostPlan(db.Model):
+    """Помесячный план расходов на строительство"""
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'monthly_cost_plans'
+
+    id = db.Column(db.Integer, primary_key=True)
+    complex_name = db.Column(db.String(255), db.ForeignKey('project_passports.complex_name'), nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    planned_spending = db.Column(db.Float, nullable=False, default=0.0)
+
+    __table_args__ = (
+        db.UniqueConstraint('complex_name', 'year', 'month', name='_complex_month_cost_uc'),
+    )
+
 class ProjectCompetitor(db.Model):
     """
     Модель для хранения данных по конкурентам для

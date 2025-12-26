@@ -114,6 +114,82 @@ def inventory_summary():
     )
 
 
+@report_bp.route('/financial-model')
+@login_required
+@permission_required('view_plan_fact_report')
+def financial_model_selection():
+    """Страница выбора ЖК для просмотра финансовой модели."""
+    # Получаем список всех названий ЖК через существующий data_service
+    complexes = data_service.get_all_complex_names()
+    if not complexes:
+        flash("Список проектов пуст", "warning")
+        return redirect(url_for('main.index'))
+
+    return render_template(
+        'reports/financial_model_selection.html',
+        complexes=complexes,
+        title="Выбор проекта для финансовой модели"
+    )
+
+
+@report_bp.route('/financial-model/<path:complex_name>', methods=['GET', 'POST'])
+@login_required
+@permission_required('view_plan_fact_report')
+def financial_model(complex_name):
+    from app.services import financial_model_service
+    from app.core.db_utils import get_planning_session
+    from app.models.planning_models import ProjectFinancialTarget
+
+    # Обработка сохранения данных
+    if request.method == 'POST':
+        session = get_planning_session()
+        try:
+            target = session.query(ProjectFinancialTarget).filter_by(complex_name=complex_name).first()
+            if not target:
+                target = ProjectFinancialTarget(complex_name=complex_name)
+                session.add(target)
+
+            target.total_construction_budget = float(request.form.get('total_construction_budget', 0))
+            target.target_margin_percent = float(request.form.get('target_margin_percent', 0))
+            target.estimated_other_costs = float(request.form.get('estimated_other_costs', 0))
+
+            session.commit()
+            flash("Финансовые цели обновлены", "success")
+        except Exception as e:
+            session.rollback()
+            flash(f"Ошибка сохранения: {e}", "danger")
+        finally:
+            session.close()
+        return redirect(url_for('report.financial_model', complex_name=complex_name))
+
+    # Получение данных
+    data = financial_model_service.get_financial_model_data(complex_name)
+
+    # Если данных нет, создаем "пустышку" для отображения интерфейса
+    if not data:
+        data = {
+            "target": ProjectFinancialTarget(
+                complex_name=complex_name,
+                total_construction_budget=0,
+                target_margin_percent=0,
+                estimated_other_costs=0
+            ),
+            "metrics": {
+                "total_target_revenue": 0,
+                "fact_revenue": 0,
+                "remaining_area": 0,
+                "recommended_price": 0,
+                "completion_percent": 0
+            },
+            "monthly_flow": []
+        }
+
+    return render_template(
+        'reports/financial_model.html',
+        complex_name=complex_name,
+        data=data
+    )
+
 @report_bp.route('/export-inventory-summary')
 @login_required
 @permission_required('view_inventory_report')
