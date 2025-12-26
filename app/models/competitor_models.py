@@ -57,6 +57,21 @@ class Competitor(db.Model):
         }
 
 
+class CompetitorHistory(db.Model):
+    __tablename__ = 'competitor_history'
+
+    id = db.Column(db.Integer, primary_key=True)
+    competitor_id = db.Column(db.Integer, db.ForeignKey('competitors.id'), nullable=False)
+
+    # Снимок данных на момент записи
+    avg_price_sqm = db.Column(db.Float)
+    avg_bottom_price = db.Column(db.Float)
+    units_count = db.Column(db.Integer)
+    sold_count = db.Column(db.Integer)
+
+    recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    competitor = db.relationship('Competitor', backref=db.backref('history', lazy='dynamic'))
 class CompetitorMedia(db.Model):
     __tablename__ = 'competitor_media'
     id = db.Column(db.Integer, primary_key=True)

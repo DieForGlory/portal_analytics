@@ -80,6 +80,12 @@ def delete_media(media_id):
         return redirect(url_for('competitor.competitor_profile', comp_id=comp_id))
     return redirect(url_for('competitor.map_view'))
 
+@competitor_bp.route('/competitors/dynamics')
+@login_required
+def market_dynamics():
+    dynamics_data = competitor_service.get_market_dynamics_data()
+    return render_template('competitors/dynamics.html', dynamics_data=dynamics_data)
+
 @competitor_bp.route('/competitors/<int:comp_id>')
 @login_required
 def competitor_profile(comp_id):

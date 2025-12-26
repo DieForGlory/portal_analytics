@@ -1,21 +1,21 @@
 # app/services/competitor_service.py
-import pandas as pd
 import io
+import os
+
 import numpy as np
-from sqlalchemy import func
+import pandas as pd
+from flask import current_app
+from werkzeug.utils import secure_filename
+
 from app.core.extensions import db
-from app.models.competitor_models import Competitor
+from app.models.competitor_models import Competitor, CompetitorHistory  # Добавить импорт
+from app.models.competitor_models import CompetitorMedia
 from app.models.estate_models import EstateSell, EstateHouse, EstateDeal
 from app.models.planning_models import (
     PropertyType, Discount, DiscountVersion, PaymentMethod,
     map_russian_to_mysql_key
 )
-
-import os
 from . import data_service, currency_service
-from werkzeug.utils import secure_filename
-from flask import current_app
-from app.models.competitor_models import CompetitorMedia
 
 
 def get_media_by_id(media_id):
@@ -187,6 +187,8 @@ def import_competitors(file):
             val = row.get(d_col)
             setattr(comp, attr, pd.to_datetime(val).date() if val else None)
         db.session.add(comp)
+        db.session.flush()
+        record_history(comp)
     db.session.commit()
 
 
@@ -260,8 +262,36 @@ def save_media(comp_id, file):
     )
     db.session.add(media)
     db.session.commit()
+def record_history(competitor):
+    """Вспомогательная функция для создания записи в истории."""
+    history_entry = CompetitorHistory(
+        competitor_id=competitor.id,
+        avg_price_sqm=competitor.avg_price_sqm,
+        avg_bottom_price=competitor.avg_bottom_price,
+        units_count=competitor.units_count,
+        sold_count=competitor.sold_count
+    )
+    db.session.add(history_entry)
+
+# В функциях import_our_projects и import_competitors
+# после db.session.add(comp) и коммита (или перед ним) вызываем запись:
 
 
+
+
+def get_market_dynamics_data():
+    """Возвращает историю изменений цен для всех конкурентов."""
+    history = CompetitorHistory.query.join(Competitor).order_by(CompetitorHistory.recorded_at.asc()).all()
+
+    # Группировка данных для графиков (например, по ЖК)
+    data = {}
+    for entry in history:
+        name = entry.competitor.name
+        if name not in data:
+            data[name] = {'labels': [], 'prices': []}
+        data[name]['labels'].append(entry.recorded_at.strftime('%d.%m.%Y'))
+        data[name]['prices'].append(entry.avg_price_sqm or 0)
+    return data
 def _to_excel(data, columns, sheet):
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine='xlsxwriter') as w:
