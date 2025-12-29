@@ -60,6 +60,9 @@
                                     <li><a class="dropdown-item" href="{{ url_for('report.inventory_summary') }}">{{ _('Сводка по остаткам') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_funnel') }}">{{ _('Воронка продаж') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.quarterly_analytics') }}">{{ _('Квартальная аналитика') }}</a></li>
+                                    <li><a class="dropdown-item fw-bold" href="{{ url_for('ai.forecast_page') }}" style="color: var(--gh-gold);">
+                                        <i class="bi bi-robot me-1"></i> {{ _('ИИ Прогноз продаж') }}
+                                    </a></li>
                                     {# --- ДОБАВЛЕНО: Ссылка на новый отчет --- #}
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_pace_report') }}">{{ _('Темпы продаж (Сравнение)') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('registry.index') }}">{{ _('Реестр спец. сделок') }}</a></li>

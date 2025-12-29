@@ -1,0 +1,134 @@
+{% extends "layouts/base.html" %}
+{% block title %}ИИ Прогноз продаж 2026{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-robot me-2"></i>ИИ Прогноз продаж на 2026 год</h2>
+        <button id="trainBtn" class="btn btn-outline-warning">
+            <i class="bi bi-cpu me-1"></i> Оптимизировать модель (200 ит.)
+        </button>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <div class="row align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Выберите месяц 2026 года:</label>
+                    <select id="monthSelect" class="form-select">
+                        <option value="1">Январь</option>
+                        <option value="2">Февраль</option>
+                        <option value="3">Март</option>
+                        <option value="4">Апрель</option>
+                        <option value="5">Май</option>
+                        <option value="6">Июнь</option>
+                        <option value="7">Июль</option>
+                        <option value="8">Август</option>
+                        <option value="9">Сентябрь</option>
+                        <option value="10">Октябрь</option>
+                        <option value="11">Ноябрь</option>
+                        <option value="12">Декабрь</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button id="predictBtn" class="btn btn-primary w-100">Сформировать</button>
+                </div>
+                <div id="modelStatus" class="col-md-6 text-end text-muted small"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="resultsArea" style="display: none;">
+        <div class="table-responsive">
+            <table class="table table-hover border">
+                <thead class="table-light">
+                    <tr>
+                        <th>Проект (ЖК)</th>
+                        <th>Средняя цена за м²</th>
+                        <th class="text-center">Остаток (кв.)</th>
+                        <th class="text-center">Прогноз сделок (шт.)</th>
+                        <th>Емкость (вымываемость)</th>
+                    </tr>
+                </thead>
+                <tbody id="forecastTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('predictBtn').addEventListener('click', async () => {
+    const month = document.getElementById('monthSelect').value;
+    const res = await fetch('/ai/api/get_forecast', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({month: month})
+    });
+    const data = await res.json();
+
+    const tbody = document.getElementById('forecastTable');
+    tbody.innerHTML = '';
+    data.forEach(item => {
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>${item.project}</strong></td>
+                <td>${item.avg_price.toLocaleString()} ₽</td>
+                <td class="text-center"><span class="badge bg-success fs-6">${item.forecast}</span></td>
+                <td>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar bg-info" style="width: ${Math.min(item.forecast * 5, 100)}%"></div>
+                    </div>
+                </td>
+            </tr>`;
+    });
+    document.getElementById('resultsArea').style.display = 'block';
+});
+
+document.getElementById('predictBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('predictBtn');
+    const tbody = document.getElementById('forecastTable');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>...';
+
+    try {
+        const month = document.getElementById('monthSelect').value;
+        const res = await fetch('/ai/api/get_forecast', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({month: month})
+        });
+
+        if (!res.ok) throw new Error('Ошибка сервера');
+        const data = await res.json();
+
+        tbody.innerHTML = '';
+        data.forEach(item => {
+            // Безопасное приведение к числу для toLocaleString
+            const price = (item.avg_price || 0).toLocaleString();
+            const forecast = item.forecast || 0;
+            const stock = item.stock || 0;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${item.project}</strong></td>
+                    <td>${price} ₽</td>
+                    <td class="text-center">${stock}</td>
+                    <td class="text-center"><span class="badge bg-success fs-6">${forecast}</span></td>
+                    <td>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-info" style="width: ${Math.min((forecast / (stock || 1)) * 100, 100)}%"></div>
+                        </div>
+                    </td>
+                </tr>`;
+        });
+        document.getElementById('resultsArea').style.display = 'block';
+    } catch (e) {
+        alert('Не удалось получить прогноз. Проверьте обучение модели.');
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Сформировать';
+    }
+});
+</script>
+{% endblock %}
