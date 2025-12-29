@@ -555,7 +555,10 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         if area_data:
             sales_analysis['by_area']['labels'] = [row[0] for row in area_data if row[0] is not None]
             sales_analysis['by_area']['data'] = [row[1] for row in area_data if row[0] is not None]
-
+    layout_data = LayoutAnalysisService.get_layout_analysis(
+        complex_name, house_ids, mysql_prop_key, active_version,
+        planning_session, mysql_session, sold_statuses, VALID_STATUSES
+    )
     # --- СБОРКА ИТОГОВОГО СЛОВАРЯ ---
     dashboard_data = {
         "complex_name": complex_name,
@@ -575,11 +578,9 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         },
         "recent_deals": recent_deals,
         "houses_data": houses_data,
+        "layout_analysis": layout_data
     }
-    dashboard_data["layout_analysis"] = LayoutAnalysisService.get_layout_analysis(
-        complex_name, house_ids, mysql_prop_key, active_version,
-        planning_session, mysql_session, sold_statuses, VALID_STATUSES
-    )
+
     mysql_session.close()
     planning_session.close()
 
