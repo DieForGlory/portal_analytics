@@ -78,6 +78,12 @@
     <button class="nav-link" id="analysis-tab" data-bs-toggle="tab" data-bs-target="#analysis-pane" type="button" role="tab">{{ _('Анализ спроса') }}</button>
   </li>
   <li class="nav-item" role="presentation">
+    <button class="nav-link" id="layout-inv-tab" data-bs-toggle="tab" data-bs-target="#layout-inv-pane" type="button" role="tab">{{ _('Остатки (планировки)') }}</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="layout-sales-tab" data-bs-toggle="tab" data-bs-target="#layout-sales-pane" type="button" role="tab">{{ _('Продажи (планировки)') }}</button>
+  </li>
+  <li class="nav-item" role="presentation">
      <button class="nav-link" id="pricing-tab" data-bs-toggle="tab" data-bs-target="#pricing-pane" type="button" role="tab">{{ _('Анализ цен') }}</button>
   </li>
   <li class="nav-item" role="presentation">
@@ -90,7 +96,59 @@
     <button class="nav-link" id="pricelist-tab" data-bs-toggle="tab" data-bs-target="#pricelist-pane" type="button" role="tab">{{ _('Создание прайс-листа') }}</button>
   </li>
 </ul>
+<div class="tab-pane fade" id="layout-inv-pane" role="tabpanel">
+    <div class="card card-glass">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table modern-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Планировка') }}</th>
+                            <th class="text-center">{{ _('Остаток, шт.') }}</th>
+                            <th class="text-end">{{ _('Сред. цена дна, UZS/м²') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in data.layout_analysis.inventory %}
+                        <tr>
+                            <td class="fw-bold">{{ item.name }}</td>
+                            <td class="text-center">{{ item.count }}</td>
+                            <td class="text-end text-success currency-value" data-uzs-value="{{ item.avg_floor_price }}">
+                                {{ "{:,.0f}".format(item.avg_floor_price) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 
+<div class="tab-pane fade" id="layout-sales-pane" role="tabpanel">
+    <div class="card card-glass">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table modern-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Планировка') }}</th>
+                            <th class="text-center">{{ _('Продано, шт.') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in data.layout_analysis.sales %}
+                        <tr>
+                            <td class="fw-bold">{{ item.name }}</td>
+                            <td class="text-center fs-5">{{ item.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 <div class="tab-content" id="projectDashboardTabContent">
   <div class="tab-pane fade show active" id="dynamics-pane" role="tabpanel">
     <div class="card card-glass h-100">

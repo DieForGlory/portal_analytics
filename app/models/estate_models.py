@@ -62,7 +62,7 @@ class EstateSell(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     house_id = db.Column(db.Integer, db.ForeignKey('estate_houses.id'), nullable=False)
-
+    plans_name = db.Column(db.String(255), nullable=True)
     estate_sell_category = db.Column(db.String(100))
     estate_floor = db.Column(db.Integer)
     estate_rooms = db.Column(db.Integer)

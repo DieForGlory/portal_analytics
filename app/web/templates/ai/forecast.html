@@ -57,37 +57,45 @@
 </div>
 
 <script>
-document.getElementById('predictBtn').addEventListener('click', async () => {
-    const month = document.getElementById('monthSelect').value;
-    const res = await fetch('/ai/api/get_forecast', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({month: month})
-    });
-    const data = await res.json();
+// Обработчик для кнопки оптимизации модели
+document.getElementById('trainBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('trainBtn');
+    const statusDiv = document.getElementById('modelStatus');
 
-    const tbody = document.getElementById('forecastTable');
-    tbody.innerHTML = '';
-    data.forEach(item => {
-        tbody.innerHTML += `
-            <tr>
-                <td><strong>${item.project}</strong></td>
-                <td>${item.avg_price.toLocaleString()} ₽</td>
-                <td class="text-center"><span class="badge bg-success fs-6">${item.forecast}</span></td>
-                <td>
-                    <div class="progress" style="height: 10px;">
-                        <div class="progress-bar bg-info" style="width: ${Math.min(item.forecast * 5, 100)}%"></div>
-                    </div>
-                </td>
-            </tr>`;
-    });
-    document.getElementById('resultsArea').style.display = 'block';
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Обучение...';
+    statusDiv.innerHTML = 'Запущен процесс оптимизации...';
+
+    try {
+        const res = await fetch('/ai/api/train', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            statusDiv.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> Модель обучена. MAE: ${data.mae}</span>`;
+            alert('Модель успешно оптимизирована');
+        } else {
+            statusDiv.innerHTML = `<span class="text-danger">Ошибка: ${data.message}</span>`;
+        }
+    } catch (e) {
+        statusDiv.innerHTML = '<span class="text-danger">Ошибка сервера</span>';
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
 });
 
+// Обработчик для формирования прогноза
 document.getElementById('predictBtn').addEventListener('click', async () => {
     const btn = document.getElementById('predictBtn');
     const tbody = document.getElementById('forecastTable');
+
     btn.disabled = true;
+    const originalText = btn.innerHTML;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>...';
 
     try {
@@ -103,10 +111,10 @@ document.getElementById('predictBtn').addEventListener('click', async () => {
 
         tbody.innerHTML = '';
         data.forEach(item => {
-            // Безопасное приведение к числу для toLocaleString
             const price = (item.avg_price || 0).toLocaleString();
             const forecast = item.forecast || 0;
             const stock = item.stock || 0;
+            const ratio = stock > 0 ? Math.min((forecast / stock) * 100, 100) : 0;
 
             tbody.innerHTML += `
                 <tr>
@@ -116,7 +124,7 @@ document.getElementById('predictBtn').addEventListener('click', async () => {
                     <td class="text-center"><span class="badge bg-success fs-6">${forecast}</span></td>
                     <td>
                         <div class="progress" style="height: 10px;">
-                            <div class="progress-bar bg-info" style="width: ${Math.min((forecast / (stock || 1)) * 100, 100)}%"></div>
+                            <div class="progress-bar bg-info" style="width: ${ratio}%"></div>
                         </div>
                     </td>
                 </tr>`;
@@ -127,7 +135,7 @@ document.getElementById('predictBtn').addEventListener('click', async () => {
         console.error(e);
     } finally {
         btn.disabled = false;
-        btn.innerHTML = 'Сформировать';
+        btn.innerHTML = originalText;
     }
 });
 </script>

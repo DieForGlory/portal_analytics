@@ -457,8 +457,70 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
         if house_details["property_types_data"]:
             houses_data.append(house_details)
+    layout_analysis = {'inventory': [], 'sales': []}
 
-    # --- KPI КАРТОЧКИ ---
+    # Подготовка метаданных по категориям (скидки и вычеты)
+    cat_meta = {}
+    for pt in planning_models.PropertyType:
+        key = map_russian_to_mysql_key(pt.value)
+        discount = 0
+        if active_version:
+            d = planning_session.query(planning_models.Discount).filter_by(
+                version_id=active_version.id, complex_name=complex_name,
+                property_type=pt, payment_method=planning_models.PaymentMethod.FULL_PAYMENT
+            ).first()
+            if d:
+                discount = (d.mpp or 0) + (d.rop or 0) + (d.kd or 0) + (d.action or 0)
+        cat_meta[key] = {
+            'deduction': 3_000_000 if pt == planning_models.PropertyType.FLAT else 0,
+            'discount': discount
+        }
+
+    # 1. Анализ остатков по планировкам
+    inv_q = mysql_session.query(EstateSell).filter(
+        EstateSell.house_id.in_(house_ids),
+        EstateSell.estate_sell_status_name.in_(VALID_STATUSES)
+    )
+    if mysql_prop_key:
+        inv_q = inv_q.filter(EstateSell.estate_sell_category == mysql_prop_key)
+
+    inv_stats = defaultdict(lambda: {'count': 0, 'prices': []})
+    for sell in inv_q.all():
+        name = sell.plans_name or "Не указано"
+        meta = cat_meta.get(sell.estate_sell_category, {'deduction': 0, 'discount': 0})
+
+        if sell.estate_price and sell.estate_price > meta['deduction'] and sell.estate_area:
+            price_sqm = ((sell.estate_price - meta['deduction']) * (1 - meta['discount'])) / sell.estate_area
+            inv_stats[name]['count'] += 1
+            inv_stats[name]['prices'].append(price_sqm)
+
+    for name, s in inv_stats.items():
+        layout_analysis['inventory'].append({
+            'name': name,
+            'count': s['count'],
+            'avg_floor_price': sum(s['prices']) / len(s['prices']) if s['prices'] else 0
+        })
+    layout_analysis['inventory'].sort(key=lambda x: x['count'], reverse=True)
+
+    # 2. Анализ продаж по планировкам
+    sales_q = mysql_session.query(
+        EstateSell.plans_name,
+        func.count(EstateDeal.id)
+    ).join(EstateDeal).filter(
+        EstateSell.house_id.in_(house_ids),
+        EstateDeal.deal_status_name.in_(sold_statuses)
+    )
+    if mysql_prop_key:
+        sales_q = sales_q.filter(EstateSell.estate_sell_category == mysql_prop_key)
+
+    sales_results = sales_q.group_by(EstateSell.plans_name).all()
+    layout_analysis['sales'] = [
+        {'name': r[0] or "Не указано", 'count': r[1]} for r in sales_results
+    ]
+    layout_analysis['sales'].sort(key=lambda x: x['count'], reverse=True)
+
+    # Добавляем в итоговый словарь
+        # --- KPI КАРТОЧКИ ---
     remainders_by_type = {}
     for k, v in remainders_for_chart.items():
         if v['count'] > 0:
@@ -559,6 +621,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     # --- СБОРКА ИТОГОВОГО СЛОВАРЯ ---
     dashboard_data = {
         "complex_name": complex_name,
+        'layout_analysis': layout_analysis,
         "kpi": {
             "total_deals_volume": total_deals_volume,
             "total_income": total_income,
