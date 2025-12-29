@@ -220,5 +220,37 @@ document.addEventListener('DOMContentLoaded', function () {
                 chartInitializers.priceDynamicsChart(isNowUsd);
             }
         });
+    const lData = charts_json_data.layout_analysis || [];
+const topLayouts = lData.slice(0, 10); // Топ-10
+
+new Chart(document.getElementById('layoutChart'), {
+    type: 'bar',
+    data: {
+        labels: topLayouts.map(i => i.name),
+        datasets: [
+            {
+                label: 'Продано (шт)',
+                data: topLayouts.map(i => i.sold),
+                backgroundColor: 'rgba(197, 149, 0, 0.7)',
+                yAxisID: 'y'
+            },
+            {
+                label: 'Цена дна (UZS/м²)',
+                data: topLayouts.map(i => i.avg_bottom),
+                type: 'line',
+                borderColor: '#00d2ff',
+                yAxisID: 'y1',
+                tension: 0.3,
+                borderWidth: 3
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: { position: 'left', title: { display: true, text: 'Шт.' } },
+            y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Цена' } }
+        }
     }
 });
