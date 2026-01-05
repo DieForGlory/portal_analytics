@@ -6,7 +6,44 @@ from app.models.registry_models import CancellationRegistry
 from app.models.estate_models import EstateSell, EstateHouse, EstateDeal
 from sqlalchemy import desc
 from sqlalchemy.orm import joinedload
+import pandas as pd
+import io
 
+
+def generate_cancellations_excel():
+    """Генерирует Excel-файл со списком всех расторжений."""
+    data = get_cancellations()  # Используем существующую функцию получения данных
+    if not data:
+        return None
+
+    df = pd.DataFrame(data)
+
+    # Маппинг колонок для выгрузки
+    column_mapping = {
+        'sell_id': 'ID Объекта',
+        'cancellation_date': 'Дата расторжения',
+        'complex': 'ЖК',
+        'house': 'Дом',
+        'entrance': 'Подъезд',
+        'number': '№ Пом.',
+        'type': 'Тип',
+        'floor': 'Этаж',
+        'rooms': 'Комн.',
+        'area': 'Площадь',
+        'contract_number': 'Номер договора',
+        'contract_date': 'Дата договора',
+        'contract_sum': 'Сумма договора'
+    }
+
+    # Выбираем только нужные колонки и переименовываем их
+    df = df[list(column_mapping.keys())].rename(columns=column_mapping)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Реестр расторжений')
+
+    output.seek(0)
+    return output
 
 def get_cancellations():
     default_session = get_default_session()
@@ -33,6 +70,9 @@ def get_cancellations():
             'house': canc.house_name,
             'entrance': canc.entrance,
             'number': canc.number,
+            'is_free': canc.is_free,
+            'is_no_money': canc.is_no_money,
+            'is_change_object': canc.is_change_object,
             'type': canc.cat_type,
             'floor': canc.floor,
             'rooms': canc.rooms,
@@ -48,7 +88,7 @@ def get_cancellations():
     return result
 
 
-def add_cancellation(sell_id: int):
+def add_cancellation(sell_id: int, is_free: bool = False, is_no_money: bool = False, is_change_object: bool = False):
     default_session = get_default_session()
     mysql_session = get_mysql_session()
 
@@ -88,6 +128,9 @@ def add_cancellation(sell_id: int):
         cat_type=sell.estate_sell_category,
         floor=sell.estate_floor,
         rooms=sell.estate_rooms,
+        is_free=is_free,
+        is_no_money=is_no_money,
+        is_change_object=is_change_object,
         area=sell.estate_area,
         contract_number=contract_num,
         contract_date=contract_date_obj,
@@ -110,7 +153,8 @@ def delete_cancellation(registry_id: int):
     return False
 
 
-def update_manual_data(registry_id: int, number: str, date_str: str, sum_val: float):
+def update_manual_data(registry_id: int, number: str, date_str: str, sum_val: float,
+                       is_free: bool, is_no_money: bool, is_change_object: bool):
     """
     Обновляет ручные поля (manual_*) для записи реестра.
     Используется, если автоматические данные из MySQL отсутствуют.
@@ -130,7 +174,9 @@ def update_manual_data(registry_id: int, number: str, date_str: str, sum_val: fl
             item.manual_date = None
 
         item.manual_sum = sum_val if sum_val else None
-
+        item.is_free = is_free
+        item.is_no_money = is_no_money
+        item.is_change_object = is_change_object
         default_session.commit()
         return True, "Данные успешно обновлены"
     except Exception as e:

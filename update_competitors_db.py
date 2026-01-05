@@ -1,40 +1,35 @@
-# update_competitors_db.py
-import sys
-import os
+from app import create_app
+from app.core.db_utils import get_default_session
 from sqlalchemy import text
 
-# Добавляем путь к проекту
-sys.path.append(os.getcwd())
 
-from app import create_app
-from app.core.extensions import db
-
-
-def migrate():
+def apply_migration():
+    """Добавляет новые поля в таблицу cancellation_registry с использованием контекста приложения."""
+    # 1. Создаем экземпляр приложения
     app = create_app()
-    with app.app_context():
-        print("[*] Запуск миграции для расширенной карточки ЖК...")
 
-        # Список полей, которые могли быть пропущены в прошлых итерациях
-        columns_to_add = [
-            ("description", "TEXT"),
-            ("is_internal", "BOOLEAN DEFAULT 0"),
-            ("sold_count", "INTEGER DEFAULT 0"),
-            ("avg_bottom_price", "FLOAT DEFAULT 0")
+    # 2. Входим в контекст приложения
+    with app.app_context():
+        session = get_default_session()
+        engine = session.get_bind()
+
+        alter_commands = [
+            "ALTER TABLE cancellation_registry ADD COLUMN is_free BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE cancellation_registry ADD COLUMN is_no_money BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE cancellation_registry ADD COLUMN is_change_object BOOLEAN DEFAULT FALSE"
         ]
 
-        with db.engine.connect() as conn:
-            for col_name, col_type in columns_to_add:
+        with engine.connect() as conn:
+            print("Начало миграции...")
+            for cmd in alter_commands:
                 try:
-                    conn.execute(text(f"ALTER TABLE competitors ADD COLUMN {col_name} {col_type}"))
+                    conn.execute(text(cmd))
                     conn.commit()
-                    print(f"[+] Колонка '{col_name}' добавлена.")
+                    print(f"Успешно: {cmd}")
                 except Exception as e:
-                    if "duplicate column name" in str(e).lower():
-                        print(f"[!] Колонка '{col_name}' уже существует.")
-                    else:
-                        print(f"[-] Ошибка при добавлении '{col_name}': {e}")
+                    print(f"Ошибка или поле уже существует: {e}")
+            print("Миграция завершена.")
 
 
 if __name__ == "__main__":
-    migrate()
+    apply_migration()

@@ -127,13 +127,12 @@ document.addEventListener('DOMContentLoaded', function () {
         },
 
         /**
-         * График: Анализ планировок
+         * График: Анализ вымываемости планировок (%) и цена дна
          */
         'layoutAnalysisChart': () => {
             const ctx = document.getElementById('layoutChart');
             if (!ctx) return;
 
-            // Проверяем наличие данных в charts или в корне объекта
             const lData = charts_json_data.layout_analysis || (charts_json_data.charts ? charts_json_data.charts.layout_analysis : []);
 
             if (!lData || lData.length === 0) {
@@ -141,22 +140,66 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            const topLayouts = lData.slice(0, 10); // Топ-10 для читаемости
+            const isUsd = document.getElementById('currencyToggle')?.checked;
+            const divisor = isUsd ? usdRate : 1;
+            const topLayouts = lData.slice(0, 15);
+
             initializedCharts['layoutChart'] = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: topLayouts.map(i => i.name),
                     datasets: [
-                        { label: 'Продано (шт)', data: topLayouts.map(i => i.sold), backgroundColor: 'rgba(197, 149, 0, 0.7)', yAxisID: 'y' },
-                        { label: 'Цена дна (UZS/м²)', data: topLayouts.map(i => i.avg_bottom), type: 'line', borderColor: '#00d2ff', yAxisID: 'y1', tension: 0.3, borderWidth: 3 }
+                        {
+                            label: 'Вымываемость (%)',
+                            data: topLayouts.map(i => i.total > 0 ? ((i.sold / i.total) * 100).toFixed(1) : 0),
+                            backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: isUsd ? 'Цена дна (USD/м²)' : 'Цена дна (UZS/м²)',
+                            data: topLayouts.map(i => i.avg_bottom / divisor),
+                            type: 'line',
+                            borderColor: '#c59500',
+                            yAxisID: 'y1',
+                            tension: 0.3,
+                            borderWidth: 3,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#c59500'
+                        }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        y: { position: 'left', title: { display: true, text: 'Шт.' } },
-                        y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Цена' } }
+                        y: {
+                            position: 'left',
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: '%' }
+                        },
+                        y1: {
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            title: { display: true, text: isUsd ? 'USD/м²' : 'UZS/м²' },
+                            ticks: { callback: value => formatCurrency(value, isUsd) }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.datasetIndex === 0) {
+                                        label += context.parsed.y + '%';
+                                    } else {
+                                        label += formatCurrency(context.parsed.y, isUsd);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
                     }
                 }
             });
@@ -202,7 +245,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (currencyToggle) {
         currencyToggle.addEventListener('change', () => {
             const isNowUsd = currencyToggle.checked;
-            // Перерисовываем только те графики, которые зависят от валюты
             if (initializedCharts['planFactChart']) {
                 initializedCharts['planFactChart'].destroy();
                 chartInitializers.planFactChart(isNowUsd);
@@ -211,7 +253,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 initializedCharts['priceDynamicsChart'].destroy();
                 chartInitializers.priceDynamicsChart(isNowUsd);
             }
+            if (initializedCharts['layoutChart']) {
+                initializedCharts['layoutChart'].destroy();
+                chartInitializers.layoutAnalysisChart();
+            }
         });
     }
 
-}); // Закрывает DOMContentLoaded
+});

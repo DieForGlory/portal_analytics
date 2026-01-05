@@ -47,7 +47,9 @@ class CancellationRegistry(db.Model):
     floor = db.Column(db.String(50))
     rooms = db.Column(db.String(50))
     area = db.Column(db.Float)
-
+    is_free = db.Column(db.Boolean, default=False)
+    is_no_money = db.Column(db.Boolean, default=False)
+    is_change_object = db.Column(db.Boolean, default=False)
     # Данные договора на момент расторжения
     contract_number = db.Column(db.String(100))
     contract_date = db.Column(db.Date)
