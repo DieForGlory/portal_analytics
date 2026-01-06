@@ -13,6 +13,82 @@ from app.core.extensions import db
 from sqlalchemy import func
 
 
+def generate_commercial_inventory_excel(currency: str, usd_rate: float):
+    """
+    Генерирует Excel-файл для коммерческой недвижимости с разбивкой по этажам.
+    """
+    mysql_session = get_mysql_session()
+    is_usd = currency == 'USD'
+    rate = usd_rate if is_usd else 1.0
+
+    # 1. Запрос только коммерческих объектов
+    # Ключ 'comm' обычно соответствует коммерции в базе
+    commercial_sells = mysql_session.query(EstateSell).options(
+        db.joinedload(EstateSell.house)
+    ).filter(
+        EstateSell.estate_sell_status_name.in_(["Маркетинговый резерв", "Подбор", "Бронь"]),
+        EstateSell.estate_sell_category == 'comm'
+    ).all()
+
+    data_rows = []
+    for sell in commercial_sells:
+        if not sell.house:
+            continue
+
+        # Определяем категорию этажа
+        try:
+            floor = int(sell.estate_floor)
+        except (ValueError, TypeError):
+            floor = 1
+
+        if floor <= 0:
+            floor_cat = "Подвальный / Цокольный этаж"
+        elif floor == 1:
+            floor_cat = "1-й этаж"
+        else:
+            floor_cat = f"{floor}-й этаж"
+
+        data_rows.append({
+            'Проект': sell.house.complex_name,
+            'Этаж': floor_cat,
+            'ID объекта': sell.id,
+            'Площадь, м²': sell.estate_area,
+            f'Цена за м² ({currency})': (
+                        sell.estate_price / sell.estate_area / rate) if sell.estate_area and sell.estate_price else 0,
+            f'Общая стоимость ({currency})': (sell.estate_price / rate) if sell.estate_price else 0,
+            'Статус': sell.estate_sell_status_name
+        })
+
+    if not data_rows:
+        return None
+
+    df = pd.DataFrame(data_rows)
+    # Сортируем для красоты: Проект -> Этаж
+    df = df.sort_values(by=['Проект', 'Этаж'])
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Коммерция по этажам')
+        workbook = writer.book
+        worksheet = writer.sheets['Коммерция по этажам']
+
+        # Форматирование
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
+        money_fmt = workbook.add_format({'num_format': '#,##0', 'border': 1})
+        area_fmt = workbook.add_format({'num_format': '#,##0.00', 'border': 1})
+
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_fmt)
+
+        worksheet.set_column('A:B', 30)  # Проект, Этаж
+        worksheet.set_column('C:C', 12)  # ID
+        worksheet.set_column('D:D', 15, area_fmt)  # Площадь
+        worksheet.set_column('E:F', 20, money_fmt)  # Цены
+        worksheet.set_column('G:G', 20)  # Статус
+
+    output.seek(0)
+    return output
+
 def get_inventory_summary_data():
     default_session = get_default_session()
     planning_session = get_planning_session()

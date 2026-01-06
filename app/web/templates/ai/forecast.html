@@ -110,16 +110,26 @@ document.getElementById('predictBtn').addEventListener('click', async () => {
         const data = await res.json();
 
         tbody.innerHTML = '';
+
+        let totalStock = 0;
+        let totalForecast = 0;
+        let totalPriceWeighted = 0;
+
         data.forEach(item => {
             const price = (item.avg_price || 0).toLocaleString();
             const forecast = item.forecast || 0;
             const stock = item.stock || 0;
             const ratio = stock > 0 ? Math.min((forecast / stock) * 100, 100) : 0;
 
+            // Накапливаем итоги
+            totalStock += stock;
+            totalForecast += forecast;
+            totalPriceWeighted += (item.avg_price || 0) * stock;
+
             tbody.innerHTML += `
                 <tr>
                     <td><strong>${item.project}</strong></td>
-                    <td>${price} ₽</td>
+                    <td>${price} UZS</td>
                     <td class="text-center">${stock}</td>
                     <td class="text-center"><span class="badge bg-success fs-6">${forecast}</span></td>
                     <td>
@@ -129,6 +139,26 @@ document.getElementById('predictBtn').addEventListener('click', async () => {
                     </td>
                 </tr>`;
         });
+
+        // Добавляем строку ИТОГО, если есть данные
+        if (data.length > 0) {
+            const avgPrice = totalStock > 0 ? Math.round(totalPriceWeighted / totalStock) : 0;
+            const overallRatio = totalStock > 0 ? Math.min((totalForecast / totalStock) * 100, 100) : 0;
+
+            tbody.innerHTML += `
+                <tr class="table-secondary fw-bold">
+                    <td>ИТОГО</td>
+                    <td>${avgPrice.toLocaleString()} UZS</td>
+                    <td class="text-center">${totalStock}</td>
+                    <td class="text-center"><span class="badge bg-primary fs-6">${totalForecast}</span></td>
+                    <td>
+                        <div class="progress" style="height: 12px;">
+                            <div class="progress-bar bg-primary" style="width: ${overallRatio}%"></div>
+                        </div>
+                    </td>
+                </tr>`;
+        }
+
         document.getElementById('resultsArea').style.display = 'block';
     } catch (e) {
         alert('Не удалось получить прогноз. Проверьте обучение модели.');

@@ -102,14 +102,23 @@ def export_expected_income_details():
 @login_required
 @permission_required('view_inventory_report')
 def inventory_summary():
-    # Изменено: распаковываем 3 значения, игнорируем summary_by_house для веб-вью
-    summary_by_complex, overall_summary, _ = inventory_service.get_inventory_summary_data()
+    # 1. Получаем параметры из URL
+    group_by = request.args.get('group_by', 'complex')  # По умолчанию группируем по ЖК
+
+    # 2. Вызываем сервис.
+    # ВАЖНО: сервис должен возвращать кортеж (данные_таблицы, итоги)
+    inventory_data, totals = report_service.get_inventory_summary_data(group_by=group_by)
+
+    # 3. Получаем курс валют для JS-переключателя
     usd_rate = currency_service.get_current_effective_rate()
+
+    # 4. Передаем ВСЕ необходимые переменные в шаблон
     return render_template(
         'reports/inventory_summary.html',
-        title="Сводка по товарному запасу",
-        summary=summary_by_complex,
-        overall_summary=overall_summary,
+        title="Товарные запасы",
+        data=inventory_data,  # Список для таблицы
+        totals=totals,  # СЛОВАРЬ ДЛЯ КАРТОЧЕК (исправляет вашу ошибку)
+        group_by=group_by,
         usd_to_uzs_rate=usd_rate
     )
 
@@ -188,6 +197,40 @@ def financial_model(complex_name):
         'reports/financial_model.html',
         complex_name=complex_name,
         data=data
+    )
+
+
+@report_bp.route('/deal-registry-report')
+@login_required
+@permission_required('view_inventory_report')
+def deal_registry_report():
+    page = request.args.get('page', 1, type=int)
+    # per_page можно вынести в настройки
+    data, pagination = report_service.get_deal_registry_report_data(page=page, per_page=50)
+
+    return render_template(
+        'reports/deal_registry_report.html',
+        title="Реестр сделок и недвижимости",
+        data=data,
+        pagination=pagination
+    )
+
+
+@report_bp.route('/export-deal-registry')
+@login_required
+@permission_required('view_inventory_report')
+def export_deal_registry():
+    excel_stream = report_service.generate_deal_registry_excel()
+    if excel_stream is None:
+        flash("Нет данных для экспорта.", "warning")
+        return redirect(url_for('report.deal_registry_report'))
+
+    filename = f"deal_registry_{date.today()}.xlsx"
+    return send_file(
+        excel_stream,
+        download_name=filename,
+        as_attachment=True,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
 @report_bp.route('/export-inventory-summary')
@@ -490,6 +533,28 @@ def export_annual_plan_fact():
         as_attachment=True,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
+
+
+@report_bp.route('/export-commercial-inventory')
+@login_required
+@permission_required('view_inventory_report')
+def export_commercial_inventory():
+    selected_currency = request.args.get('currency', 'UZS')
+    usd_rate = currency_service.get_current_effective_rate()
+
+    excel_stream = inventory_service.generate_commercial_inventory_excel(selected_currency, usd_rate)
+
+    if excel_stream is None:
+        flash("Нет данных по коммерческой недвижимости для экспорта.", "warning")
+        return redirect(url_for('report.inventory_summary'))
+
+    filename = f"commercial_inventory_{selected_currency}_{date.today()}.xlsx"
+    return send_file(
+        excel_stream,
+        download_name=filename,
+        as_attachment=True,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 @report_bp.route('/export-plan-fact')
 @login_required
 @permission_required('view_plan_fact_report')
@@ -497,12 +562,23 @@ def export_plan_fact():
     today = date.today()
     year = request.args.get('year', today.year, type=int)
     month = request.args.get('month', today.month, type=int)
+    period = request.args.get('period', 'monthly')
     prop_type = request.args.get('property_type', 'All')
-    excel_stream = report_service.generate_plan_fact_excel(year, month, prop_type)
+    currency = request.args.get('currency', 'UZS')
+
+    # Получаем текущий курс
+    usd_rate = currency_service.get_current_effective_rate()
+
+    # Вызываем обновленную функцию
+    excel_stream = report_service.generate_plan_fact_excel(
+        year, month, prop_type, period=period, currency=currency, rate=usd_rate
+    )
+
     if excel_stream is None:
         flash("Нет данных для экспорта.", "warning")
         return redirect(url_for('report.plan_fact_report'))
-    filename = f"plan_fact_report_{prop_type}_{month:02d}_{year}.xlsx"
+
+    filename = f"plan_fact_{prop_type}_{period}_{currency}_{date.today()}.xlsx"
     return send_file(
         excel_stream,
         download_name=filename,

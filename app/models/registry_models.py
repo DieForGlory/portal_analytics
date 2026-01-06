@@ -34,11 +34,11 @@ class CancellationRegistry(db.Model):
     __tablename__ = 'cancellation_registry'
 
     id = db.Column(db.Integer, primary_key=True)
-    estate_sell_id = db.Column(db.Integer, nullable=False, unique=True, index=True)
+    # УБРАНО unique=True, так как один объект может расторгаться несколько раз
+    estate_sell_id = db.Column(db.Integer, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.now)
     comment = db.Column(db.String(255), nullable=True)
 
-    # Поля для "замороженных" данных из MySQL
     complex_name = db.Column(db.String(255))
     house_name = db.Column(db.String(255))
     entrance = db.Column(db.String(50))
@@ -47,15 +47,15 @@ class CancellationRegistry(db.Model):
     floor = db.Column(db.String(50))
     rooms = db.Column(db.String(50))
     area = db.Column(db.Float)
+
     is_free = db.Column(db.Boolean, default=False)
     is_no_money = db.Column(db.Boolean, default=False)
     is_change_object = db.Column(db.Boolean, default=False)
-    # Данные договора на момент расторжения
+
     contract_number = db.Column(db.String(100))
     contract_date = db.Column(db.Date)
     contract_sum = db.Column(db.Float)
 
-    # Поля ручной корректировки
     manual_number = db.Column(db.String(64), nullable=True)
     manual_date = db.Column(db.Date, nullable=True)
     manual_sum = db.Column(db.Float, nullable=True)

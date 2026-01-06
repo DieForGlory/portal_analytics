@@ -56,9 +56,11 @@
                                 </a>
                                 <ul class="dropdown-menu">
                                     <li><a class="dropdown-item" href="{{ url_for('report.plan_fact_report') }}">{{ _('План-факт отчет') }}</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('report.financial_model_selection') }}">{{ _('Финансовая модель') }}</a></li> <li><a class="dropdown-item" href="{{ url_for('report.inventory_summary') }}">{{ _('Сводка по остаткам') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('report.financial_model_selection') }}">{{ _('Финансовая модель') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.inventory_summary') }}">{{ _('Сводка по остаткам') }}</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('report.sales_funnel') }}">{{ _('Воронка продаж') }}</a></li>
+                                    {% if current_user.can('view_inventory_report') %}
+                                    <li><a class="dropdown-item" href="{{ url_for('report.deal_registry_report') }}">{{ _('Реестр сделок и недвижимости') }}</a></li>
+                                    {% endif %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.quarterly_analytics') }}">{{ _('Квартальная аналитика') }}</a></li>
                                     <li><a class="dropdown-item fw-bold" href="{{ url_for('ai.forecast_page') }}" style="color: var(--gh-gold);">
                                         <i class="bi bi-robot me-1"></i> {{ _('ИИ Прогноз продаж') }}

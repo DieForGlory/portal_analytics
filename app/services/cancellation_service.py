@@ -11,37 +11,41 @@ import io
 
 
 def generate_cancellations_excel():
-    """Генерирует Excel-файл со списком всех расторжений."""
-    data = get_cancellations()  # Используем существующую функцию получения данных
+    """Генерирует Excel-файл без столбцов локации, но с параметрами расторжения."""
+    data = get_cancellations()
     if not data:
         return None
 
     df = pd.DataFrame(data)
 
-    # Маппинг колонок для выгрузки
+    # Преобразование булевых значений для выгрузки
+    status_map = {True: 'Да', False: '-'}
+    df['is_free'] = df['is_free'].map(status_map)
+    df['is_no_money'] = df['is_no_money'].map(status_map)
+    df['is_change_object'] = df['is_change_object'].map(status_map)
+
+    # Обновленный маппинг: удалены Дом, Подъезд, Номер помещения
     column_mapping = {
         'sell_id': 'ID Объекта',
         'cancellation_date': 'Дата расторжения',
         'complex': 'ЖК',
-        'house': 'Дом',
-        'entrance': 'Подъезд',
-        'number': '№ Пом.',
         'type': 'Тип',
         'floor': 'Этаж',
         'rooms': 'Комн.',
         'area': 'Площадь',
+        'is_free': 'Свободно',
+        'is_no_money': 'Без денег',
+        'is_change_object': 'Смена объекта',
         'contract_number': 'Номер договора',
         'contract_date': 'Дата договора',
         'contract_sum': 'Сумма договора'
     }
 
-    # Выбираем только нужные колонки и переименовываем их
     df = df[list(column_mapping.keys())].rename(columns=column_mapping)
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Реестр расторжений')
-
     output.seek(0)
     return output
 
@@ -92,12 +96,7 @@ def add_cancellation(sell_id: int, is_free: bool = False, is_no_money: bool = Fa
     default_session = get_default_session()
     mysql_session = get_mysql_session()
 
-    # Проверка на дубликаты
-    exists = default_session.query(CancellationRegistry).filter_by(estate_sell_id=sell_id).first()
-    if exists:
-        return False, "Этот объект уже в списке расторжений."
-
-    # 1. Получаем данные из MySQL один раз
+    # 1. Получаем данные из MySQL с подгрузкой связей
     sell = mysql_session.query(EstateSell).options(
         joinedload(EstateSell.house),
         joinedload(EstateSell.deals)
@@ -106,19 +105,28 @@ def add_cancellation(sell_id: int, is_free: bool = False, is_no_money: bool = Fa
     if not sell:
         return False, f"Объект {sell_id} не найден в MySQL."
 
-    # Извлечение данных договора (логика как была в get_cancellations)
+    # 2. Инициализируем переменные договора (всегда, чтобы избежать NameError)
     contract_num = None
     contract_date_obj = None
     contract_sum = 0
 
     if sell.deals:
-        sorted_deals = sorted(sell.deals, key=lambda d: d.id, reverse=True)
-        last_deal = sorted_deals[0]
+        # Выбираем последнюю сделку по ID (самая актуальная)
+        last_deal = max(sell.deals, key=lambda d: d.id)
         contract_num = getattr(last_deal, 'agreement_number', getattr(last_deal, 'arles_agreement_num', None))
         contract_date_obj = last_deal.agreement_date or last_deal.preliminary_date
         contract_sum = last_deal.deal_sum or 0
 
-    # 2. Создаем запись со всеми заполненными полями
+    # 3. Проверка на дубликат: разрешаем один ID, если номера договоров разные
+    exists = default_session.query(CancellationRegistry).filter_by(
+        estate_sell_id=sell_id,
+        contract_number=contract_num
+    ).first()
+
+    if exists:
+        return False, f"Расторжение по договору {contract_num} уже внесено в реестр."
+
+    # 4. Создаем запись со всеми заполненными полями
     new_cancellation = CancellationRegistry(
         estate_sell_id=sell_id,
         complex_name=sell.house.complex_name if sell.house else '-',
@@ -137,9 +145,13 @@ def add_cancellation(sell_id: int, is_free: bool = False, is_no_money: bool = Fa
         contract_sum=contract_sum
     )
 
-    default_session.add(new_cancellation)
-    default_session.commit()
-    return True, "Объект добавлен и данные сохранены."
+    try:
+        default_session.add(new_cancellation)
+        default_session.commit()
+        return True, "Объект успешно добавлен в реестр расторжений."
+    except Exception as e:
+        default_session.rollback()
+        return False, f"Ошибка сохранения: {e}"
 
 
 def delete_cancellation(registry_id: int):

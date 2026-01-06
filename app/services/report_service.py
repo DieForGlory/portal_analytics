@@ -13,11 +13,157 @@ from .data_service import get_all_complex_names
 from ..models.estate_models import EstateDeal, EstateHouse, EstateSell
 from ..models.finance_models import FinanceOperation
 from . import currency_service
-
+from sqlalchemy import func, or_
+from app.models.estate_models import EstateSell, EstateDeal, EstateHouse
+from app.models.finance_models import FinanceOperation
+from app.models.planning_models import map_mysql_key_to_russian_value
+from app.core.db_utils import get_mysql_session
 # --- ДОБАВЛЕНЫ НУЖНЫЕ ИМПОРТЫ "ПЕРЕВОДЧИКОВ" ---
 from app.models.planning_models import map_russian_to_mysql_key, map_mysql_key_to_russian_value, PropertyType, \
     PaymentMethod
+from sqlalchemy.orm import joinedload
 
+
+def get_deal_registry_report_data(page=1, per_page=50):
+    mysql_session = get_mysql_session()
+
+    query = mysql_session.query(EstateSell).options(
+        joinedload(EstateSell.house),
+        joinedload(EstateSell.deals),
+        joinedload(EstateSell.finance_operations)
+    ).join(EstateHouse)
+
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    report_data = []
+
+    for sell in pagination.items:
+        # Логика выбора валидной сделки (как исправляли ранее)
+        valid_deals = [
+            d for d in sell.deals
+            if d.deal_status_name not in ["Не определён", "Отменено", None]
+               and d.deal_program_name is not None
+        ]
+        deal = max(valid_deals, key=lambda d: d.id) if valid_deals else (
+            max(sell.deals, key=lambda d: d.id) if sell.deals else None)
+
+        # Расчет дат договора
+        raw_contract_date = None
+        if deal:
+            raw_contract_date = deal.agreement_date or deal.preliminary_date
+
+        # Техническое поле: дата договора на начало месяца
+        contract_start_month = "-"
+        if raw_contract_date:
+            contract_start_month = raw_contract_date.replace(day=1).strftime('%d.%m.%Y')
+
+        # Сбор финансов
+        all_non_booking_dates = [
+            op.date_added for op in sell.finance_operations
+            if op.payment_type != "Бронь" and op.date_added is not None
+        ]
+        first_payment_date = min(all_non_booking_dates) if all_non_booking_dates else None
+
+        report_data.append({
+            'object_id': sell.id,
+            'project_name': sell.house.complex_name if sell.house else "-",  # Название проекта
+            'house_name': sell.house.name if sell.house else "-",  # Номер/имя дома
+            'type': map_mysql_key_to_russian_value(sell.estate_sell_category),
+            'payment_method': deal.deal_program_name if deal else "-",
+            'contract_status': "Оплачен" if deal and any(
+                op.status_name == "Проведено" and op.payment_type != "Бронь" for op in
+                sell.finance_operations) else "Не оплачен",
+            'first_payment_date': first_payment_date.strftime('%d.%m.%Y') if first_payment_date else "-",
+            'agreement_date': raw_contract_date.strftime('%d.%m.%Y') if raw_contract_date else "-",
+            'contract_start_month': contract_start_month,  # Техническое поле
+            'agreement_number': (deal.agreement_number or deal.arles_agreement_num) if deal else "-",
+            'deal_sum': deal.deal_sum if deal else 0,
+            'area': sell.estate_area,
+            'object_status': sell.estate_sell_status_name
+        })
+
+    return report_data, pagination
+
+
+def generate_deal_registry_excel():
+    mysql_session = get_mysql_session()
+    all_sells = mysql_session.query(EstateSell).options(
+        joinedload(EstateSell.house),
+        joinedload(EstateSell.deals),
+        joinedload(EstateSell.finance_operations)
+    ).all()
+
+    excel_data = []
+    for sell in all_sells:
+        valid_deals = [d for d in sell.deals if d.deal_status_name not in ["Не определён", "Отменено", None]]
+        deal = max(valid_deals, key=lambda d: d.id) if valid_deals else None
+
+        raw_date = (deal.agreement_date or deal.preliminary_date) if deal else None
+
+        excel_data.append({
+            'ID объекта': sell.id,
+            'Проект': sell.house.complex_name if sell.house else "-",
+            'Дом': sell.house.name if sell.house else "-",
+            'Тип объекта': map_mysql_key_to_russian_value(sell.estate_sell_category),
+            'Вид оплаты': deal.deal_program_name if deal else "-",
+            'Статус договора': "Оплачен" if deal and any(
+                op.status_name == "Проведено" and op.payment_type != "Бронь" for op in
+                sell.finance_operations) else "Не оплачен",
+            'Дата первой оплаты': min([op.date_added for op in sell.finance_operations if
+                                       op.payment_type != "Бронь" and op.date_added]).strftime('%d.%m.%Y') if any(
+                op.payment_type != "Бронь" and op.date_added for op in sell.finance_operations) else "-",
+            'Дата договора': raw_date.strftime('%d.%m.%Y') if raw_date else "-",
+            'Дата договора (нач. месяца)': raw_date.replace(day=1).strftime('%d.%m.%Y') if raw_date else "-",
+            'Номер договора': (deal.agreement_number or deal.arles_agreement_num) if deal else "-",
+            'Стоимость по договору': deal.deal_sum if deal else 0,
+            'Площадь': sell.estate_area,
+            'Статус объекта': sell.estate_sell_status_name
+        })
+
+    df = pd.DataFrame(excel_data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Реестр сделок')
+    output.seek(0)
+    return output
+
+
+def generate_plan_fact_excel_from_data(report_data, totals, year, month, period, property_type):
+    if not report_data:
+        return None
+
+    df = pd.DataFrame(report_data)
+
+    # Обработка вложенного словаря expected_income
+    df['expected_income'] = df['expected_income'].apply(lambda x: x.get('sum', 0) if isinstance(x, dict) else x)
+
+    # Подготовка строки итогов
+    totals_row = totals.copy()
+    if isinstance(totals_row.get('expected_income'), dict):
+        totals_row['expected_income'] = totals_row['expected_income'].get('sum', 0)
+
+    totals_df = pd.DataFrame([totals_row])
+    totals_df.insert(0, 'complex_name', f'Итого ({property_type})')
+
+    # Определение колонок
+    ordered_columns = [
+        'complex_name', 'plan_units', 'fact_units', 'percent_fact_units',
+        'plan_volume', 'fact_volume', 'percent_fact_volume',
+        'plan_income', 'fact_income', 'percent_fact_income', 'expected_income'
+    ]
+
+    # Фильтруем колонки, которые могут отсутствовать в периодах (например, прогнозы)
+    avail_cols = [c for c in ordered_columns if c in df.columns]
+
+    final_df = pd.concat([df[avail_cols], totals_df[avail_cols]], ignore_index=True)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        sheet_name = f"{period}_{year}"
+        final_df.to_excel(writer, index=False, sheet_name=sheet_name[:31])
+
+    output.seek(0)
+    return output
 
 def generate_zero_mortgage_template_excel():
     """
@@ -62,38 +208,45 @@ def generate_zero_mortgage_template_excel():
 
 def generate_consolidated_report_by_period(year: int, period: str, property_type: str):
     """
-    Генерирует сводный отчет за период (квартал, полугодие), суммируя данные по месяцам.
+    Генерирует сводный отчет за период, корректно агрегируя словари ожидаемых поступлений.
     """
-    # (Код этой функции без изменений, т.к. она вызывает generate_plan_fact_report)
     PERIOD_MONTHS = {
-        'q1': range(1, 4),  # 1-й квартал
-        'q2': range(4, 7),  # 2-й квартал
-        'q3': range(7, 10),  # 3-й квартал
-        'q4': range(10, 13),  # 4-й квартал
-        'h1': range(1, 7),  # 1-е полугодие
-        'h2': range(7, 13),  # 2-е полугодие
+        'q1': range(1, 4), 'q2': range(4, 7), 'q3': range(7, 10), 'q4': range(10, 13),
+        'h1': range(1, 7), 'h2': range(7, 13),
     }
 
     months_in_period = PERIOD_MONTHS.get(period)
     if not months_in_period:
         return [], {}
 
-    aggregated_data = defaultdict(lambda: defaultdict(float))
+    # Используем структуру для хранения агрегированных данных
+    aggregated_data = defaultdict(lambda: {
+        'plan_units': 0, 'fact_units': 0, 'plan_volume': 0, 'fact_volume': 0,
+        'plan_income': 0, 'fact_income': 0,
+        'expected_income': {'sum': 0, 'ids': []}
+    })
     aggregated_totals = defaultdict(float)
+    aggregated_totals['expected_income_ids'] = []
 
     for month in months_in_period:
-        monthly_data, monthly_totals, _ = generate_plan_fact_report(year, month, property_type)  # Игнорируем refunds
+        monthly_data, monthly_totals, _ = generate_plan_fact_report(year, month, property_type)
 
         for project_row in monthly_data:
             complex_name = project_row['complex_name']
-            for key, value in project_row.items():
-                if key != 'complex_name' and isinstance(value, (int, float)):
-                    aggregated_data[complex_name][key] += value
             aggregated_data[complex_name]['complex_name'] = complex_name
+            for key in ['plan_units', 'fact_units', 'plan_volume', 'fact_volume', 'plan_income', 'fact_income']:
+                aggregated_data[complex_name][key] += project_row.get(key, 0)
 
-        for key, value in monthly_totals.items():
-            if isinstance(value, (int, float)):
-                aggregated_totals[key] += value
+            # Агрегация словаря ожидаемых поступлений
+            e_inc = project_row.get('expected_income', {'sum': 0, 'ids': []})
+            aggregated_data[complex_name]['expected_income']['sum'] += e_inc.get('sum', 0)
+            aggregated_data[complex_name]['expected_income']['ids'].extend(e_inc.get('ids', []))
+
+        # Агрегация итогов
+        for key in ['plan_units', 'fact_units', 'plan_volume', 'fact_volume', 'plan_income', 'fact_income']:
+            aggregated_totals[key] += monthly_totals.get(key, 0)
+        aggregated_totals['expected_income'] += monthly_totals.get('expected_income', 0)
+        aggregated_totals['expected_income_ids'].extend(monthly_totals.get('expected_income_ids', []))
 
     final_report_data = []
     for complex_name, data in aggregated_data.items():
@@ -104,22 +257,14 @@ def generate_consolidated_report_by_period(year: int, period: str, property_type
                                                                                                'plan_income'] > 0 else 0
         data['forecast_units'] = 0
         data['forecast_volume'] = 0
-        final_report_data.append(dict(data))
+        final_report_data.append(data)
 
-    aggregated_totals['percent_fact_units'] = (
-            aggregated_totals['fact_units'] / aggregated_totals['plan_units'] * 100) if aggregated_totals[
-                                                                                            'plan_units'] > 0 else 0
-    aggregated_totals['percent_fact_volume'] = (
-            aggregated_totals['fact_volume'] / aggregated_totals['plan_volume'] * 100) if aggregated_totals[
-                                                                                              'plan_volume'] > 0 else 0
-    aggregated_totals['percent_fact_income'] = (
-            aggregated_totals['fact_income'] / aggregated_totals['plan_income'] * 100) if aggregated_totals[
-                                                                                              'plan_income'] > 0 else 0
-    aggregated_totals['forecast_units'] = 0
-    aggregated_totals['forecast_volume'] = 0
+    for k in ['units', 'volume', 'income']:
+        aggregated_totals[f'percent_fact_{k}'] = (
+                    aggregated_totals[f'fact_{k}'] / aggregated_totals[f'plan_{k}'] * 100) if aggregated_totals[
+                                                                                                  f'plan_{k}'] > 0 else 0
 
     final_report_data.sort(key=lambda x: x['complex_name'])
-
     return final_report_data, dict(aggregated_totals)
 
 
@@ -478,45 +623,62 @@ def get_plan_volume_data(year: int, month: int, property_type: str):
     return plan_data
 
 
-def generate_plan_fact_excel(year: int, month: int, property_type: str):
+def generate_plan_fact_excel(year: int, month: int, property_type: str, period: str = 'monthly', currency: str = 'UZS',
+                             rate: float = 1.0):
     """
-    Генерирует Excel-файл с детальным план-фактным отчетом (ИСПРАВЛЕННАЯ ВЕРСИЯ).
+    Универсальная генерация Excel с поддержкой периодов и конвертации валюты.
     """
-    # (Код этой функции без изменений)
-    report_data, totals, total_refunds = generate_plan_fact_report(year, month, property_type)
+    if period != 'monthly':
+        report_data, totals = generate_consolidated_report_by_period(year, period, property_type)
+    else:
+        report_data, totals, _ = generate_plan_fact_report(year, month, property_type)
 
     if not report_data:
         return None
 
-    df = pd.DataFrame(report_data)
+    # Подготовка данных: извлекаем суммы из словарей
+    for row in report_data:
+        if isinstance(row.get('expected_income'), dict):
+            row['expected_income'] = row['expected_income'].get('sum', 0)
 
-    # --- ИСПРАВЛЕНИЕ: Извлекаем 'sum' из 'expected_income' ---
-    # Убедимся, что 'expected_income' в totals также является числом
-    if 'expected_income' in totals and isinstance(totals['expected_income'], dict):
+    if isinstance(totals.get('expected_income'), dict):
         totals['expected_income'] = totals['expected_income'].get('sum', 0)
 
+    df = pd.DataFrame(report_data)
     totals_df = pd.DataFrame([totals])
-    # ---
 
+    # Применение курса валют
+    if currency == 'USD' and rate > 1:
+        money_cols = ['plan_volume', 'fact_volume', 'plan_income', 'fact_income', 'expected_income']
+        for col in money_cols:
+            if col in df.columns:
+                df[col] = df[col] / rate
+            if col in totals_df.columns:
+                totals_df[col] = totals_df[col] / rate
+
+    # Формирование финальной таблицы
     ordered_columns = [
-        'complex_name',
-        'plan_units', 'fact_units', 'percent_fact_units', 'forecast_units',
-        'plan_volume', 'fact_volume', 'percent_fact_volume', 'forecast_volume',
+        'complex_name', 'plan_units', 'fact_units', 'percent_fact_units',
+        'plan_volume', 'fact_volume', 'percent_fact_volume',
         'plan_income', 'fact_income', 'percent_fact_income', 'expected_income'
     ]
-    renamed_columns = [
-        'Проект',
-        'План, шт', 'Факт, шт', '% Факт, шт', '% Прогноз, шт',
-        'План контрактации', 'Факт контрактации', '% Факт контр.', '% Прогноз контр.',
-        'План поступлений', 'Факт поступлений', '% Факт поступл.', 'Ожидаемые поступл.'
-    ]
 
-    # --- ИСПРАВЛЕНИЕ: Извлекаем 'sum' из 'expected_income' ---
-    df['expected_income'] = df['expected_income'].apply(lambda x: x.get('sum', 0) if isinstance(x, dict) else 0)
-    # ---
+    # Добавляем колонки прогнозов только для месячного отчета
+    if period == 'monthly':
+        ordered_columns.insert(4, 'forecast_units')
+        ordered_columns.insert(8, 'forecast_volume')
+
+    renamed_columns = [
+        'Проект', 'План, шт', 'Факт, шт', '% Вып. (шт)',
+        f'План контр., {currency}', f'Факт контр., {currency}', '% Вып. (контр.)',
+        f'План пост., {currency}', f'Факт пост., {currency}', '% Вып. (пост.)', f'Ожид. пост., {currency}'
+    ]
+    if period == 'monthly':
+        renamed_columns.insert(4, '% Прогноз (шт)')
+        renamed_columns.insert(8, '% Прогноз (контр.)')
 
     df = df[ordered_columns]
-    totals_df = totals_df[[col for col in ordered_columns if col != 'complex_name']]
+    totals_df = totals_df[[c for c in ordered_columns if c != 'complex_name']]
     totals_df.insert(0, 'complex_name', f'Итого ({property_type})')
 
     final_df = pd.concat([df, totals_df], ignore_index=True)
@@ -524,8 +686,7 @@ def generate_plan_fact_excel(year: int, month: int, property_type: str):
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        final_df.to_excel(writer, index=False, sheet_name=f'План-факт {month:02d}-{year}')
-
+        final_df.to_excel(writer, index=False, sheet_name=f'Report {period}')
     output.seek(0)
     return output
 

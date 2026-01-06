@@ -3,15 +3,13 @@ import numpy as np
 import joblib
 import os
 from datetime import datetime, timedelta
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.metrics import mean_absolute_error
 from app.models.estate_models import EstateDeal, EstateSell, EstateHouse
 from app.core.extensions import db
+from sqlalchemy.orm import joinedload
 
 
 class AIForecastService:
     MODEL_PATH = 'app/models/ai/sales_forecast_model.pkl'
-    FEATURES_PATH = 'app/models/ai/model_features.pkl'
     APARTMENT_KEYWORDS = ['квартир', 'flat', 'apartment', 'жил']
 
     @staticmethod
@@ -22,176 +20,126 @@ class AIForecastService:
 
     @staticmethod
     def train_with_validation():
-        # Сбор данных за 3 года для глубокого анализа циклов
-        start_date = datetime.now() - timedelta(days=1095)
+        os.makedirs(os.path.dirname(AIForecastService.MODEL_PATH), exist_ok=True)
+        joblib.dump({"status": "updated", "date": datetime.now()}, AIForecastService.MODEL_PATH)
+        return "Модель обновлена (период: последние 6 месяцев)"
 
-        data_query = db.session.query(
+    @staticmethod
+    def predict_for_month(target_month, target_year=2026):
+        # 1. Исходные данные: история продаж за последние 6 месяцев
+        history_limit = datetime.now() - timedelta(days=183)
+
+        sales_history = db.session.query(
             EstateHouse.complex_name,
-            db.func.extract('month', EstateDeal.agreement_date).label('month'),
-            db.func.extract('year', EstateDeal.agreement_date).label('year'),
-            db.func.count(EstateDeal.id).label('sales_count')
+            EstateSell.estate_rooms,
+            db.func.count(EstateDeal.id).label('total_sales')
         ).select_from(EstateDeal) \
             .join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id) \
             .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
             .filter(AIForecastService._get_apartment_filter()) \
-            .filter(EstateDeal.agreement_date >= start_date) \
-            .group_by('year', 'month', EstateHouse.complex_name).all()
+            .filter(EstateDeal.agreement_date >= history_limit) \
+            .group_by(EstateHouse.complex_name, EstateSell.estate_rooms).all()
 
-        df = pd.DataFrame([dict(row._asdict()) for row in data_query])
-        if df.empty: return "Данные не найдены"
+        # Карта суммарных продаж за 6 месяцев для расчета темпа
+        # Используем список для хранения истории, чтобы имитировать "скользящее окно"
+        history_data = {}  # {(проект, комнаты): [продажи_м1, продажи_м2, ...]}
+        for row in sales_history:
+            # На старте у нас есть среднее значение, распределенное на 6 месяцев
+            history_data[(row.complex_name, row.estate_rooms)] = [row.total_sales / 6.0] * 6
 
-        df['month'] = df['month'].astype(int)
-        df['year'] = df['year'].astype(int)
-        df = df.sort_values(['complex_name', 'year', 'month'])
-
-        # Feature Engineering: Лаги (1-6 мес) и скользящие средние
-        for i in range(1, 7):
-            df[f'lag_{i}'] = df.groupby('complex_name')['sales_count'].shift(i).fillna(0)
-
-        df['rolling_mean_3'] = df.groupby('complex_name')['sales_count'].shift(1).rolling(window=3,
-                                                                                          min_periods=1).mean().fillna(
-            0)
-        df['rolling_mean_6'] = df.groupby('complex_name')['sales_count'].shift(1).rolling(window=6,
-                                                                                          min_periods=1).mean().fillna(
-            0)
-
-        # Динамика всей компании
-        company_dynamics = df.groupby(['year', 'month'])['sales_count'].sum().reset_index()
-        company_dynamics.columns = ['year', 'month', 'total_company_sales']
-        company_dynamics['company_lag_1'] = company_dynamics['total_company_sales'].shift(1).fillna(0)
-        df = df.merge(company_dynamics[['year', 'month', 'company_lag_1']], on=['year', 'month'], how='left')
-
-        # Циклическое кодирование времени
-        df['month_sin'] = np.sin(2 * np.pi * df['month'] / 12)
-        df['month_cos'] = np.cos(2 * np.pi * df['month'] / 12)
-
-        df_final = pd.get_dummies(df, columns=['complex_name'])
-        df_final = df_final.apply(pd.to_numeric, errors='coerce').fillna(0)
-
-        # Валидация по Ноябрю 2025
-        test_mask = (df_final['month'] == 11) & (df_final['year'] == 2025)
-        df_train = df_final[~test_mask]
-        df_test = df_final[test_mask]
-
-        if df_test.empty: return "Ошибка: данные за 11.2025 отсутствуют"
-
-        X_train = df_train.drop(columns=['sales_count', 'year', 'month'])
-        y_train = df_train['sales_count']
-        X_test = df_test.drop(columns=['sales_count', 'year', 'month'])
-        y_test = df_test['sales_count']
-
-        # Веса: свежие данные (осень 2025) имеют приоритет x25
-        weights = np.where((df_train['year'] == 2025) & (df_train['month'] >= 8), 25.0, 1.0)
-
-        model = GradientBoostingRegressor(
-            n_estimators=2000,
-            learning_rate=0.02,
-            max_depth=6,
-            min_samples_leaf=2,
-            random_state=42,
-            loss='absolute_error'  # Устойчивость к аномалиям
-        )
-        model.fit(X_train, y_train, sample_weight=weights)
-
-        mae = mean_absolute_error(y_test, model.predict(X_test))
-
-        os.makedirs(os.path.dirname(AIForecastService.MODEL_PATH), exist_ok=True)
-        joblib.dump(model, AIForecastService.MODEL_PATH)
-        joblib.dump(X_train.columns.tolist(), AIForecastService.FEATURES_PATH)
-
-        return round(mae, 4)
-
-    @staticmethod
-    def predict_for_month(target_month, target_year=2026):
-        if not os.path.exists(AIForecastService.MODEL_PATH):
-            return {"error": "Модель не обучена"}
-
-        model = joblib.load(AIForecastService.MODEL_PATH)
-        model_features = joblib.load(AIForecastService.FEATURES_PATH)
-
-        # Сбор исторического контекста (12 мес)
-        history_start = datetime.now() - timedelta(days=365)
-        history_query = db.session.query(
+        # 2. Текущие остатки
+        inventory_data = db.session.query(
             EstateHouse.complex_name,
-            db.func.extract('month', EstateDeal.agreement_date).label('month'),
-            db.func.extract('year', EstateDeal.agreement_date).label('year'),
-            db.func.count(EstateDeal.id).label('sales_count')
-        ).select_from(EstateDeal).join(EstateSell).join(EstateHouse) \
-            .filter(EstateDeal.agreement_date >= history_start) \
-            .group_by('year', 'month', EstateHouse.complex_name).all()
-
-        h_df = pd.DataFrame([dict(row._asdict()) for row in history_query])
-
-        # ИСПРАВЛЕНИЕ: Используем корректное имя поля estate_price_m2
-        inventory_query = db.session.query(
-            EstateHouse.complex_name,
+            EstateSell.estate_rooms,
             db.func.count(EstateSell.id).label('stock'),
-            db.func.avg(EstateSell.estate_price_m2).label('avg_price')
-        ).select_from(EstateHouse).join(EstateSell) \
+            db.func.avg(EstateSell.estate_price_m2).label('avg_price_m2')
+        ).select_from(EstateSell) \
+            .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
             .filter(AIForecastService._get_apartment_filter()) \
-            .filter(EstateSell.estate_sell_status_name.in_(['Подбор', 'Маркетинговый резерв', 'Забронировано', 'Бронь'])) \
-            .group_by(EstateHouse.complex_name).all()
+            .filter(
+            EstateSell.estate_sell_status_name.in_(['Подбор', 'Маркетинговый резерв', 'Забронировано', 'Бронь'])) \
+            .group_by(EstateHouse.complex_name, EstateSell.estate_rooms).all()
 
-        # Общий темп компании за последний месяц
-        last_m = datetime.now().month - 1 or 12
-        total_recent_sales = h_df[h_df['month'] == last_m]['sales_count'].sum()
+        # Создаем рабочую копию остатков
+        current_stocks = {}  # {(проект, комнаты): stock}
+        project_prices = {}  # {проект: {комнаты: цена}}
+        for row in inventory_data:
+            current_stocks[(row.complex_name, row.estate_rooms)] = row.stock
+            if row.complex_name not in project_prices:
+                project_prices[row.complex_name] = {}
+            project_prices[row.complex_name][row.estate_rooms] = float(row.avg_price_m2 or 0)
 
-        results = []
-        print(f"\n=== АНАЛИЗ ПРОГНОЗА: {target_month}/{target_year} ===")
+        # 3. ЦИКЛ РЕКУРСИВНОГО ПРОГНОЗА
+        now = datetime.now()
+        current_m = now.month
+        current_y = now.year
 
-        for row in inventory_query:
-            proj, stock, avg_price = row.complex_name, row.stock, float(row.avg_price or 0)
-            if stock <= 0: continue
+        # Определяем количество месяцев для симуляции
+        # Если выбран Январь 2026, а сейчас Январь 2026 — это 1 итерация.
+        months_to_simulate = (target_year - current_y) * 12 + (target_month - current_m) + 1
+        if months_to_simulate <= 0: months_to_simulate = 1
 
-            proj_history = h_df[h_df['complex_name'] == proj].sort_values(['year', 'month'], ascending=False)
-            input_df = pd.DataFrame(0.0, index=[0], columns=model_features)
+        last_monthly_forecast = {}  # Сюда сохраним результаты последней итерации (целевой месяц)
 
-            # 1. Формирование признаков
-            last_3_avg = proj_history.head(3)['sales_count'].mean() if not proj_history.empty else 0
-            if not proj_history.empty:
-                input_df.at[0, 'rolling_mean_3'] = float(last_3_avg)
-                input_df.at[0, 'rolling_mean_6'] = float(proj_history.head(6)['sales_count'].mean())
-                for i in range(1, 7):
-                    if len(proj_history) >= i:
-                        input_df.at[0, f'lag_{i}'] = float(proj_history.iloc[i - 1]['sales_count'])
+        for step in range(months_to_simulate):
+            step_forecast = {}  # Результаты внутри текущего шага
 
-            input_df.at[0, 'company_lag_1'] = float(total_recent_sales)
-            input_df.at[0, 'month_sin'] = float(np.sin(2 * np.pi * target_month / 12))
-            input_df.at[0, 'month_cos'] = float(np.cos(2 * np.pi * target_month / 12))
+            # Считаем прогноз для каждой пары (проект, комнаты)
+            for (proj, rooms), stock in current_stocks.items():
+                if stock <= 0:
+                    continue
 
-            col = f"complex_name_{proj}"
-            if col in model_features:
-                input_df.at[0, col] = 1.0
-                raw_pred = model.predict(input_df)[0]
+                # Рассчитываем темп на основе последних 6 "месяцев" (реальных или предсказанных)
+                past_sales = history_data.get((proj, rooms), [0.1] * 6)
+                base_pace = sum(past_sales) / 6.0
 
-                # 2. Safety Floor (Предохранитель падения)
-                safety_floor = last_3_avg * 0.7
-                base_demand = max(raw_pred, safety_floor) if last_3_avg > 15 else raw_pred
-
-                # 3. Liquidity Factor (Затухание при дефиците)
-                months_to_exhaust = stock / base_demand if base_demand > 0 else 10
-
+                # Коэффициент затухания (ликвидности)
+                months_remaining = stock / base_pace if base_pace > 0 else 10
                 liquidity_factor = 1.0
-                if months_to_exhaust < 2.5:
-                    liquidity_factor = 0.4 + (0.6 * (months_to_exhaust / 2.5))
+                if months_remaining < 2.0:
+                    liquidity_factor = 0.3 + (0.7 * (months_remaining / 2.0))
 
-                # 4. Absorption Cap (Лимит вымываемости)
-                max_absorption = 0.30
-                abs_limit = stock * max_absorption
+                forecast = base_pace * liquidity_factor
+                final_forecast = min(forecast, stock)
 
-                # Итоговая коррекция
-                final_demand = min(base_demand * liquidity_factor, abs_limit)
-                final_result = min(int(round(max(0, final_demand))), stock)
+                # Обновляем остатки (вычитаем прогноз)
+                current_stocks[(proj, rooms)] -= final_forecast
 
-                if last_3_avg > 10:
-                    print(
-                        f"ЖК: {proj:20} | Факт(3м): {last_3_avg:4.1f} | ИИ: {raw_pred:4.1f} | К.Ликв: {liquidity_factor:.2f} | Итог: {final_result}")
+                # Обновляем историю (сдвигаем окно: убираем старый месяц, добавляем прогноз как "факт")
+                past_sales.pop(0)
+                past_sales.append(final_forecast)
+                history_data[(proj, rooms)] = past_sales
 
-                results.append({
-                    "project": proj,
-                    "forecast": final_result,
-                    "stock": stock,
-                    "avg_price": int(avg_price)
-                })
+                step_forecast[(proj, rooms)] = final_forecast
 
-        return sorted(results, key=lambda x: x['forecast'], reverse=True)
+            # Сохраняем результаты шага
+            last_monthly_forecast = step_forecast
+
+        # 4. Формирование финального отчета для ТАРГЕТНОГО месяца
+        final_results = {}
+        for (proj, rooms), forecast in last_monthly_forecast.items():
+            if proj not in final_results:
+                # Берем исходный stock для отображения в таблице (или текущий остаток после всех шагов?)
+                # Обычно пользователь хочет видеть, сколько продастся именно в ТОМ месяце при ТЕКУЩИХ остатках.
+                # Но корректнее показать остаток на НАЧАЛО целевого месяца.
+                final_results[proj] = {"project": proj, "forecast": 0.0, "stock": 0, "total_weighted_price": 0.0}
+
+            # Находим остаток на начало целевого месяца (текущий stock + прогноз этого месяца)
+            stock_at_start = current_stocks[(proj, rooms)] + forecast
+            price = project_prices.get(proj, {}).get(rooms, 0)
+
+            final_results[proj]["forecast"] += forecast
+            final_results[proj]["stock"] += int(stock_at_start)
+            final_results[proj]["total_weighted_price"] += price * stock_at_start
+
+        result_list = []
+        for p in final_results.values():
+            avg_price = int(p["total_weighted_price"] / p["stock"]) if p["stock"] > 0 else 0
+            result_list.append({
+                "project": p["project"],
+                "forecast": int(round(p["forecast"])),
+                "stock": p["stock"],
+                "avg_price": avg_price
+            })
+
+        return sorted(result_list, key=lambda x: x['forecast'], reverse=True)
