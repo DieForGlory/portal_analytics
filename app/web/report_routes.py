@@ -2,6 +2,7 @@
 import json
 import os
 import io
+from app.services import refund_service
 from app.services import quarterly_report_service, data_service
 from datetime import date, timedelta  # Убедитесь, что date импортирован
 from datetime import datetime
@@ -33,6 +34,32 @@ from ..models.estate_models import EstateHouse
 
 report_bp = Blueprint('report', __name__, template_folder='templates')
 
+
+@report_bp.route('/refund-report')
+@login_required
+@permission_required('view_plan_fact_report')
+def refund_report():
+    today = date.today()
+    year = request.args.get('year', today.year, type=int)
+    month = request.args.get('month', today.month, type=int)
+
+    # Получаем данные из сервиса
+    data = refund_service.get_refund_report_data(year, month)
+
+    # Получаем актуальный курс
+    usd_rate = currency_service.get_current_effective_rate()
+
+    return render_template(
+        'reports/refund_report.html',
+        title="Отчет по возвратам",
+        data=data,
+        selected_year=year,
+        selected_month=month,
+        years=[today.year - 1, today.year, today.year + 1],
+        months=range(1, 13),
+        usd_to_uzs_rate=usd_rate,
+        datetime=datetime  # <--- ИСПРАВЛЕНИЕ: Передаем datetime в шаблон
+    )
 
 @report_bp.route('/manager-kpi-calculate/<int:manager_id>/<int:year>/<int:month>')
 @login_required
@@ -102,22 +129,28 @@ def export_expected_income_details():
 @login_required
 @permission_required('view_inventory_report')
 def inventory_summary():
-    # 1. Получаем параметры из URL
-    group_by = request.args.get('group_by', 'complex')  # По умолчанию группируем по ЖК
+    group_by = request.args.get('group_by', 'complex')
 
-    # 2. Вызываем сервис.
-    # ВАЖНО: сервис должен возвращать кортеж (данные_таблицы, итоги)
-    inventory_data, totals = report_service.get_inventory_summary_data(group_by=group_by)
+    # Вызываем сервис, который возвращает 3 набора данных
+    summary_by_complex, overall_summary, summary_by_house = inventory_service.get_inventory_summary_data()
 
-    # 3. Получаем курс валют для JS-переключателя
+    # Выбираем данные для таблицы в зависимости от группировки
+    data = summary_by_house if group_by == 'house' else summary_by_complex
+
+    # Рассчитываем общие итоги (Grand Totals) по всем типам недвижимости
+    grand_totals = {
+        'total_count': sum(m['units'] for m in overall_summary.values()),
+        'total_area': sum(m['total_area'] for m in overall_summary.values()),
+        'total_value': sum(m['total_value'] for m in overall_summary.values()),
+    }
+
     usd_rate = currency_service.get_current_effective_rate()
 
-    # 4. Передаем ВСЕ необходимые переменные в шаблон
     return render_template(
         'reports/inventory_summary.html',
-        title="Товарные запасы",
-        data=inventory_data,  # Список для таблицы
-        totals=totals,  # СЛОВАРЬ ДЛЯ КАРТОЧЕК (исправляет вашу ошибку)
+        title="Товарные запасы (Цены дна)",
+        data=data,  # Вложенный словарь {Проект: {Тип: Метрики}}
+        totals=grand_totals,
         group_by=group_by,
         usd_to_uzs_rate=usd_rate
     )

@@ -15,14 +15,24 @@ from sqlalchemy import func
 
 def generate_commercial_inventory_excel(currency: str, usd_rate: float):
     """
-    Генерирует Excel-файл для коммерческой недвижимости с разбивкой по этажам.
+    Генерирует Excel-файл для коммерческой недвижимости с разбивкой по этажам и ЦЕНАМИ ДНА.
     """
     mysql_session = get_mysql_session()
+    planning_session = get_planning_session() # Открываем сессию для доступа к скидкам
     is_usd = currency == 'USD'
     rate = usd_rate if is_usd else 1.0
 
-    # 1. Запрос только коммерческих объектов
-    # Ключ 'comm' обычно соответствует коммерции в базе
+    # 1. Получаем активную версию скидок (100% оплата)
+    active_version = planning_session.query(DiscountVersion).filter_by(is_active=True).first()
+    discounts_map = {}
+    if active_version:
+        discounts_map = {
+            (d.complex_name, d.property_type): d
+            for d in active_version.discounts
+            if d.payment_method == PaymentMethod.FULL_PAYMENT
+        }
+
+    # 2. Запрос коммерческих объектов в продаже
     commercial_sells = mysql_session.query(EstateSell).options(
         db.joinedload(EstateSell.house)
     ).filter(
@@ -35,56 +45,66 @@ def generate_commercial_inventory_excel(currency: str, usd_rate: float):
         if not sell.house:
             continue
 
-        # Определяем категорию этажа
+        # Определяем тип недвижимости для поиска скидки
+        try:
+            rus_cat = map_mysql_key_to_russian_value(sell.estate_sell_category)
+            prop_type_enum = PropertyType(rus_cat)
+        except ValueError:
+            continue
+
+        # РАСЧЕТ ЦЕНЫ ДНА (Floor Price)
+        discount = discounts_map.get((sell.house.complex_name, prop_type_enum))
+        bottom_price = 0
+        if sell.estate_price:
+            price_for_calc = sell.estate_price # Для коммерции вычета 3 млн нет
+            if price_for_calc > 0 and discount:
+                # Суммируем коэффициенты МПП, РОП и КД
+                total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
+                bottom_price = price_for_calc * (1 - total_discount_rate)
+            else:
+                bottom_price = price_for_calc
+
+        # Категория этажа
         try:
             floor = int(sell.estate_floor)
         except (ValueError, TypeError):
             floor = 1
-
-        if floor <= 0:
-            floor_cat = "Подвальный / Цокольный этаж"
-        elif floor == 1:
-            floor_cat = "1-й этаж"
-        else:
-            floor_cat = f"{floor}-й этаж"
+        floor_cat = "1-й этаж" if floor == 1 else ("Подвальный / Цокольный" if floor <= 0 else f"{floor}-й этаж")
 
         data_rows.append({
             'Проект': sell.house.complex_name,
             'Этаж': floor_cat,
             'ID объекта': sell.id,
             'Площадь, м²': sell.estate_area,
-            f'Цена за м² ({currency})': (
-                        sell.estate_price / sell.estate_area / rate) if sell.estate_area and sell.estate_price else 0,
-            f'Общая стоимость ({currency})': (sell.estate_price / rate) if sell.estate_price else 0,
+            f'Цена дна за м² ({currency})': (bottom_price / sell.estate_area / rate) if sell.estate_area else 0,
+            f'Общая стоимость дна ({currency})': (bottom_price / rate),
             'Статус': sell.estate_sell_status_name
         })
+
+    planning_session.close()
 
     if not data_rows:
         return None
 
-    df = pd.DataFrame(data_rows)
-    # Сортируем для красоты: Проект -> Этаж
-    df = df.sort_values(by=['Проект', 'Этаж'])
-
+    # Создание DataFrame и экспорт в Excel
+    df = pd.DataFrame(data_rows).sort_values(by=['Проект', 'Этаж'])
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Коммерция по этажам')
+        df.to_excel(writer, index=False, sheet_name='Коммерция (дно)')
         workbook = writer.book
-        worksheet = writer.sheets['Коммерция по этажам']
+        worksheet = writer.sheets['Коммерция (дно)']
 
-        # Форматирование
         header_fmt = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
-        money_fmt = workbook.add_format({'num_format': '#,##0', 'border': 1})
+        money_fmt = workbook.add_format({'num_format': '"$"#,##0.00' if is_usd else '#,##0', 'border': 1})
         area_fmt = workbook.add_format({'num_format': '#,##0.00', 'border': 1})
 
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(0, col_num, value, header_fmt)
 
-        worksheet.set_column('A:B', 30)  # Проект, Этаж
-        worksheet.set_column('C:C', 12)  # ID
-        worksheet.set_column('D:D', 15, area_fmt)  # Площадь
-        worksheet.set_column('E:F', 20, money_fmt)  # Цены
-        worksheet.set_column('G:G', 20)  # Статус
+        worksheet.set_column('A:B', 25)
+        worksheet.set_column('D:D', 15, area_fmt)
+        worksheet.set_column('E:F', 22, money_fmt)
+        worksheet.set_column('G:G', 20)
 
     output.seek(0)
     return output
