@@ -260,4 +260,26 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // --- ЛОГИКА ИСКЛЮЧЕНИЯ ОБЪЕКТОВ ИЗ ПРАЙС-ЛИСТА ---
+    const pricelistForm = document.getElementById('pricelistForm');
+    const excludedIdsInput = document.getElementById('excludedIdsInput');
+    const selectAllCheck = document.getElementById('selectAllExclusions');
+    const exclusionTable = document.getElementById('exclusionTable');
+
+    if (pricelistForm) {
+        // Синхронизация чекбоксов со скрытым инпутом перед отправкой формы
+        pricelistForm.addEventListener('submit', function () {
+            const checkedIds = Array.from(document.querySelectorAll('.exclusion-checkbox:checked'))
+                .map(cb => cb.value);
+            excludedIdsInput.value = checkedIds.join(',');
+        });
+
+        // Логика "Выбрать все"
+        if (selectAllCheck && exclusionTable) {
+            selectAllCheck.addEventListener('change', function () {
+                const visibleCheckboxes = exclusionTable.querySelectorAll('tbody tr:not(.d-none) .exclusion-checkbox');
+                visibleCheckboxes.forEach(cb => cb.checked = selectAllCheck.checked);
+            });
+        }
+    }
 });

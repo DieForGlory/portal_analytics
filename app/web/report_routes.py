@@ -326,10 +326,18 @@ def generate_pricelist_files(complex_name):
     percent_val = request.form.get('percent', '0').replace(',', '.')
     percent = float(percent_val) / 100
     file_format = request.form.get('format')
+    excluded_ids_raw = request.form.get('excluded_ids', '')
+    excluded_ids = []
+    if excluded_ids_raw:
+        try:
+            excluded_ids = [int(x.strip()) for x in excluded_ids_raw.split(',') if x.strip()]
+        except ValueError:
+            flash("Некорректный формат ID исключаемых объектов", "warning")
 
-    # Сервис возвращает реестр (results) и статистику для шаблонов (stats)
-    results, stats = pricelist_service.calculate_new_prices(complex_name, prop_type, percent)
-
+    # Передаем список в сервис
+    results, stats = pricelist_service.calculate_new_prices(
+        complex_name, prop_type, percent, excluded_ids=excluded_ids
+    )
     if results is None:  # Обработка ошибки (например, нет версии скидок)
         flash(stats, "warning")
         return redirect(url_for('report.project_dashboard', complex_name=complex_name))

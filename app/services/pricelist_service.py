@@ -13,7 +13,14 @@ RESERVATION_FEE = 3_000_000
 REMAINDER_STATUSES = ["Маркетинговый резерв", "Подбор"]
 
 
-def calculate_new_prices(complex_name, property_type_ru, percent_change):
+def calculate_new_prices(complex_name, property_type_ru, percent_change, excluded_ids=None):
+    """
+    Рассчитывает новые цены с учетом списка исключенных ID.
+    Для объектов в списке excluded_ids повышение цены не применяется (изменение = 0%).
+    """
+    if excluded_ids is None:
+        excluded_ids = []
+
     mysql_session = get_mysql_session()
     planning_session = get_planning_session()
     try:
@@ -59,16 +66,23 @@ def calculate_new_prices(complex_name, property_type_ru, percent_change):
             'usd_rate': usd_rate,
             'by_house_rooms': {},
             'by_floor': {},
-            'by_rooms_comparison': {} # Новое поле для таблицы "Было/Стало" по типологии
+            'by_rooms_comparison': {}
         }
 
         for obj in all_objects:
             if not obj.estate_price or not obj.estate_area or obj.estate_area <= 0:
                 continue
 
+            # Определение процента изменения для конкретного объекта:
+            # Если ID в списке исключений, используем 0, иначе стандартный процент.
+            current_unit_percent = 0 if obj.id in excluded_ids else percent_change
+
             c_floor_total_uzs = (obj.estate_price - RESERVATION_FEE) * discount_multiplier
             c_floor_sqm_usd = (c_floor_total_uzs / obj.estate_area) / usd_rate
-            n_floor_sqm_usd = c_floor_sqm_usd * (1 + percent_change)
+
+            # Применение индивидуального процента к цене за кв.м.
+            n_floor_sqm_usd = c_floor_sqm_usd * (1 + current_unit_percent)
+
             n_floor_total_uzs = (n_floor_sqm_usd * usd_rate) * obj.estate_area
             n_estate_price = (n_floor_total_uzs / discount_multiplier) + RESERVATION_FEE
 
@@ -84,20 +98,17 @@ def calculate_new_prices(complex_name, property_type_ru, percent_change):
                 stats['final_totals_before'] += obj.estate_price / usd_rate
                 stats['final_totals_after'] += n_estate_price / usd_rate
 
-                # Группировка для таблицы справа (дома/комнаты)
                 h_name = house_map.get(obj.house_id, "Неизвестно")
                 hr_key = (h_name, obj.estate_rooms or 0)
                 if hr_key not in stats['by_house_rooms']:
                     stats['by_house_rooms'][hr_key] = []
                 stats['by_house_rooms'][hr_key].append(n_floor_sqm_usd)
 
-                # Группировка для таблицы справа (этажи)
                 fl_key = obj.estate_floor or 0
                 if fl_key not in stats['by_floor']:
                     stats['by_floor'][fl_key] = []
                 stats['by_floor'][fl_key].append(n_floor_sqm_usd)
 
-                # Группировка для новой таблицы типологии (Было/Стало)
                 rooms = obj.estate_rooms or 0
                 if rooms not in stats['by_rooms_comparison']:
                     stats['by_rooms_comparison'][rooms] = {'before': [], 'after': []}

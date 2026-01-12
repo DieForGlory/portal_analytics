@@ -587,7 +587,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     return dashboard_data
 
 
-def get_project_passport_data(complex_name: str):
+def get_project_passport_data(complex_name,property_type=None):
     """
     Собирает все статические и динамические данные для "Паспорта проекта".
     """
@@ -597,7 +597,30 @@ def get_project_passport_data(complex_name: str):
     sold_statuses = ["Сделка в работе", "Сделка проведена"]
     remainder_statuses = ["Маркетинговый резерв", "Подбор"]
     VALID_STATUSES = ["Маркетинговый резерв", "Подбор"]
+    REMAINDER_STATUSES = ["Маркетинговый резерв", "Подбор"]
+    inventory_query = mysql_session.query(EstateSell).join(EstateHouse).filter(
+        EstateHouse.complex_name == complex_name
+    )
+    if property_type:
+        inventory_query = inventory_query.filter(EstateSell.estate_sell_category == property_type)
 
+    inventory_units = inventory_query.filter(
+        EstateSell.estate_sell_status_name.in_(REMAINDER_STATUSES)
+    ).all()
+
+    # Сериализуем для шаблона
+    data['inventory_units'] = [
+        {
+            'id': u.id,
+            'house': u.house.name,
+            'floor': u.estate_floor,
+            'rooms': u.estate_rooms,
+            'area': u.estate_area,
+            'price': u.estate_price
+        } for u in inventory_units
+    ]
+
+    return data
     # 1. Получаем ID домов в комплексе
     house_ids_query = mysql_session.query(EstateHouse.id).filter(EstateHouse.complex_name == complex_name)
     house_ids = [h[0] for h in house_ids_query.all()]
