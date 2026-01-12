@@ -63,7 +63,14 @@ class FinanceOperation(db.Model):
         primaryjoin='foreign(FinanceOperation.manager_id) == app.models.auth_models.SalesManager.id'
     )
 
+class DailyCurrencyRate(db.Model):
+    """Таблица исторических курсов валют."""
+    __tablename__ = 'daily_currency_rates'
+    date = db.Column(db.Date, primary_key=True)
+    rate = db.Column(db.Float, nullable=False)
 
+    def __repr__(self):
+        return f'<DailyRate {self.date}: {self.rate}>'
 class CurrencySettings(db.Model):
     # Эта модель в ЛОКАЛЬНОЙ базе (main_app.db)
     __tablename__ = 'currency_settings'
@@ -73,7 +80,7 @@ class CurrencySettings(db.Model):
     manual_rate = db.Column(db.Float, default=0.0)
     effective_rate = db.Column(db.Float, default=0.0)
     cbu_last_updated = db.Column(db.DateTime)
-
+    use_historical_rate = db.Column(db.Boolean, default=False, nullable=False)
     def update_effective_rate(self):
         if self.rate_source == 'cbu':
             self.effective_rate = self.cbu_rate

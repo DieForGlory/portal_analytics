@@ -532,13 +532,21 @@ def currency_settings():
             except (ValueError, TypeError):
                 flash("Неверное значение для ручного курса.", "danger")
 
-        # 3. ДОБАВЛЕНО: Принудительное обновление курса ЦБ
+        # 3. Принудительное обновление курса ЦБ
         elif 'update_cbu' in request.form:
             success = currency_service.update_cbu_rate()
             if success:
                 flash("Курс ЦБ успешно обновлен.", "success")
             else:
                 flash("Не удалось обновить курс ЦБ. Проверьте логи.", "danger")
+
+        # 4. Сохранение логики исторических курсов (исправление)
+        elif 'update_calculation_logic' in request.form:
+            settings = currency_service._get_settings()
+            # Чекбокс передается только если он нажат
+            settings.use_historical_rate = 'use_historical_rate' in request.form
+            get_default_session().commit()
+            flash("Логика расчета успешно обновлена.", "success")
 
         return redirect(url_for('report.currency_settings'))
 
@@ -551,15 +559,20 @@ def currency_settings():
 @permission_required('view_plan_fact_report')
 def export_annual_plan_fact():
     year = request.args.get('year', date.today().year, type=int)
+    # Получаем валюту из параметров запроса
+    currency = request.args.get('currency', 'UZS')
 
-    # Вызываем функцию генерации из сервиса
-    excel_stream = report_service.generate_annual_report_excel(year)
+    # Получаем текущий эффективный курс
+    usd_rate = currency_service.get_current_effective_rate()
+
+    # Передаем валюту и курс в сервис
+    excel_stream = report_service.generate_annual_report_excel(year, currency=currency, rate=usd_rate)
 
     if excel_stream is None:
         flash("Не удалось сгенерировать годовой отчет.", "danger")
         return redirect(url_for('report.plan_fact_report'))
 
-    filename = f"Annual_Report_{year}.xlsx"
+    filename = f"Annual_Report_{year}_{currency}.xlsx"
     return send_file(
         excel_stream,
         download_name=filename,

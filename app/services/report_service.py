@@ -269,38 +269,52 @@ def generate_consolidated_report_by_period(year: int, period: str, property_type
 
 
 def get_fact_income_data(year: int, month: int, property_type: str):
-    """Собирает ФАКТИЧЕСКИЕ поступления (статус 'Проведено')."""
+    """Сбор фактических поступлений с делением на исторический курс."""
     mysql_session = get_mysql_session()
+    settings = currency_service._get_settings()
+    current_rate = settings.effective_rate
+
+    # Запрос детальных записей вместо агрегации func.sum
     query = mysql_session.query(
-        EstateHouse.complex_name, func.sum(FinanceOperation.summa).label('fact_income')
+        EstateHouse.complex_name,
+        FinanceOperation.summa,
+        FinanceOperation.date_added
     ).join(EstateSell, FinanceOperation.estate_sell_id == EstateSell.id) \
         .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
         .filter(
         FinanceOperation.status_name == "Проведено",
         extract('year', FinanceOperation.date_added) == year,
         extract('month', FinanceOperation.date_added) == month,
-        FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
-        FinanceOperation.payment_type != "Уступка права требования",
+        FinanceOperation.payment_type != "Возврат поступлений при отмене сделки"
     )
-    if property_type != 'All':
-        # --- ИСПРАВЛЕНИЕ: Переводим 'Квартира' в 'flat' ---
-        mysql_key = map_russian_to_mysql_key(property_type)
-        query = query.filter(EstateSell.estate_sell_category == mysql_key)
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
-    results = query.group_by(EstateHouse.complex_name).all()
-    return {row.complex_name: (row.fact_income or 0) for row in results}
+    if property_type != 'All':
+        query = query.filter(EstateSell.estate_sell_category == map_russian_to_mysql_key(property_type))
+
+    income_by_complex = defaultdict(float)
+    for complex_name, summa, op_date in query.all():
+        val = summa or 0
+        if settings.use_historical_rate:
+            # Деление суммы в UZS на курс даты операции для получения валютного эквивалента
+            hist_rate = currency_service.get_rate_for_date(op_date)
+            # Приведение к текущему эффективному курсу
+            val = (val / hist_rate) * current_rate
+        income_by_complex[complex_name] += val
+
+    return income_by_complex
 
 
 def get_expected_income_data(year: int, month: int, property_type: str):
-    """
-    Собирает ОЖИДАЕМЫЕ поступления (ИСКЛЮЧАЯ возвраты), их сумму и ID операций.
-    """
+    """Сбор ожидаемых поступлений с делением на курс даты планируемого платежа."""
     mysql_session = get_mysql_session()
+    settings = currency_service._get_settings()
+    current_rate = settings.effective_rate
+
     query = mysql_session.query(
         EstateHouse.complex_name,
-        func.sum(FinanceOperation.summa).label('expected_income'),
-        func.group_concat(FinanceOperation.id).label('income_ids')
+        FinanceOperation.summa,
+        FinanceOperation.date_to,
+        FinanceOperation.id
     ).join(EstateSell, FinanceOperation.estate_sell_id == EstateSell.id) \
         .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
         .filter(
@@ -309,17 +323,23 @@ def get_expected_income_data(year: int, month: int, property_type: str):
         extract('month', FinanceOperation.date_to) == month,
         FinanceOperation.payment_type != "Возврат поступлений при отмене сделки"
     )
-    if property_type != 'All':
-        # --- ИСПРАВЛЕНИЕ: Переводим 'Квартира' в 'flat' ---
-        mysql_key = map_russian_to_mysql_key(property_type)
-        query = query.filter(EstateSell.estate_sell_category == mysql_key)
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
-    results = query.group_by(EstateHouse.complex_name).all()
+    if property_type != 'All':
+        query = query.filter(EstateSell.estate_sell_category == map_russian_to_mysql_key(property_type))
+
     data = {}
-    for row in results:
-        ids = [int(id_str) for id_str in row.income_ids.split(',')] if row.income_ids else []
-        data[row.complex_name] = {'sum': row.expected_income or 0, 'ids': ids}
+    for complex_name, summa, due_date, op_id in query.all():
+        if complex_name not in data:
+            data[complex_name] = {'sum': 0, 'ids': []}
+
+        val = summa or 0
+        if settings.use_historical_rate:
+            hist_rate = currency_service.get_rate_for_date(due_date)
+            val = (val / hist_rate) * current_rate
+
+        data[complex_name]['sum'] += val
+        data[complex_name]['ids'].append(op_id)
+
     return data
 
 
@@ -589,24 +609,36 @@ def get_monthly_summary_by_property_type(year: int, month: int):
 
 
 def get_fact_volume_data(year: int, month: int, property_type: str):
-    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+    """Сбор объема контрактации с делением на курс даты договора."""
     mysql_session = get_mysql_session()
+    settings = currency_service._get_settings()
+    current_rate = settings.effective_rate
+    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+
     query = mysql_session.query(
-        EstateHouse.complex_name, func.sum(EstateDeal.deal_sum).label('fact_volume')
-    ).join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id).join(EstateHouse,
-                                                                        EstateSell.house_id == EstateHouse.id).filter(
+        EstateHouse.complex_name,
+        EstateDeal.deal_sum,
+        effective_date.label('deal_date')
+    ).join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id) \
+        .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
+        .filter(
         EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"]),
         extract('year', effective_date) == year,
         extract('month', effective_date) == month
     )
-    if property_type != 'All':
-        # --- ИСПРАВЛЕНИЕ: Переводим 'Квартира' в 'flat' ---
-        mysql_key = map_russian_to_mysql_key(property_type)
-        query = query.filter(EstateSell.estate_sell_category == mysql_key)
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
-    results = query.group_by(EstateHouse.complex_name).all()
-    return {row.complex_name: (row.fact_volume or 0) for row in results}
+    if property_type != 'All':
+        query = query.filter(EstateSell.estate_sell_category == map_russian_to_mysql_key(property_type))
+
+    volume_by_complex = defaultdict(float)
+    for complex_name, deal_sum, deal_date in query.all():
+        val = deal_sum or 0
+        if settings.use_historical_rate:
+            hist_rate = currency_service.get_rate_for_date(deal_date)
+            val = (val / hist_rate) * current_rate
+        volume_by_complex[complex_name] += val
+
+    return volume_by_complex
 
 
 def get_plan_volume_data(year: int, month: int, property_type: str):
@@ -789,29 +821,30 @@ def get_sales_pace_comparison_data():
     }
 
 
-def generate_annual_report_excel(year: int):
-    """
-    Генерирует годовой отчет в Excel с тремя листами:
-    1. Свод по месяцам (Итого)
-    2. Детализация по проектам (за каждый месяц)
-    3. Детализация по типам недвижимости (за каждый месяц)
-    """
+def generate_annual_report_excel(year: int, currency: str = 'UZS', rate: float = 1.0):
+    """Генерирует годовой отчет с конвертацией финансовых показателей."""
     all_projects_rows = []
     all_types_rows = []
     all_months_rows = []
 
-    # Проходим по всем месяцам года
-    for month in range(1, 13):
-        # 1. Данные по проектам (используем 'All' для всех типов недвижимости внутри проекта)
-        proj_data, totals, _ = generate_plan_fact_report(year, month, 'All')
+    # Список ключей, содержащих денежные суммы
+    money_keys = [
+        'plan_volume', 'fact_volume', 'plan_income', 'fact_income', 'expected_income',
+        'total_plan_volume', 'total_fact_volume', 'total_plan_income', 'total_fact_income'
+    ]
 
-        # Обработка данных по проектам
+    for month in range(1, 13):
+        # 1. Данные по проектам
+        proj_data, totals, _ = generate_plan_fact_report(year, month, 'All')
         for row in proj_data:
             r = row.copy()
             r['month'] = month
-            # Извлекаем сумму из словаря expected_income, если это словарь
             if isinstance(r.get('expected_income'), dict):
                 r['expected_income'] = r['expected_income'].get('sum', 0)
+
+            if currency == 'USD' and rate > 0:
+                for key in money_keys:
+                    if key in r: r[key] = (r[key] or 0) / rate
             all_projects_rows.append(r)
 
         # 2. Данные по типам недвижимости
@@ -819,85 +852,51 @@ def generate_annual_report_excel(year: int):
         for row in type_data:
             r = row.copy()
             r['month'] = month
-            # Извлекаем сумму из total_expected_income
-            if isinstance(r.get('total_expected_income'), dict):
-                r['expected_income'] = r['total_expected_income'].get('sum', 0)
-            else:
-                r['expected_income'] = 0
-            # Удаляем сложный объект, чтобы не мешал созданию DF
-            if 'total_expected_income' in r:
-                del r['total_expected_income']
+            r['expected_income'] = r.get('total_expected_income', {}).get('sum', 0) if isinstance(
+                r.get('total_expected_income'), dict) else 0
+
+            if currency == 'USD' and rate > 0:
+                for key in money_keys:
+                    if key in r: r[key] = (r[key] or 0) / rate
+
+            if 'total_expected_income' in r: del r['total_expected_income']
             all_types_rows.append(r)
 
         # 3. Общие итоги за месяц
         t = totals.copy()
         t['month'] = month
-        # totals['expected_income'] обычно float, но на всякий случай проверим
         if isinstance(t.get('expected_income'), dict):
             t['expected_income'] = t['expected_income'].get('sum', 0)
-        # Удаляем список ID, он не нужен в Excel
-        if 'expected_income_ids' in t:
-            del t['expected_income_ids']
+
+        if currency == 'USD' and rate > 0:
+            for key in money_keys:
+                if key in t: t[key] = (t[key] or 0) / rate
+
+        if 'expected_income_ids' in t: del t['expected_income_ids']
         all_months_rows.append(t)
 
-    # --- Формируем DataFrame ---
-
-    # Лист 1: Свод по месяцам
-    df_months = pd.DataFrame(all_months_rows)
-    month_cols_map = {
-        'month': 'Месяц',
+    # Динамические заголовки для Excel
+    cols_map = {
+        'month': 'Месяц', 'complex_name': 'Проект', 'property_type': 'Тип',
         'plan_units': 'План (шт)', 'fact_units': 'Факт (шт)', 'percent_fact_units': '% Вып. (шт)',
-        'plan_volume': 'План (контрактация)', 'fact_volume': 'Факт (контрактация)',
-        'percent_fact_volume': '% Вып. (контр.)',
-        'plan_income': 'План (поступления)', 'fact_income': 'Факт (поступления)',
-        'percent_fact_income': '% Вып. (пост.)',
-        'expected_income': 'Ожидаемые поступления'
+        'plan_volume': f'План контр. ({currency})', 'fact_volume': f'Факт контр. ({currency})',
+        'plan_income': f'План пост. ({currency})', 'fact_income': f'Факт пост. ({currency})',
+        'expected_income': f'Ожид. пост. ({currency})',
+        'total_plan_units': 'План (шт)', 'total_fact_units': 'Факт (шт)',
+        'total_plan_volume': f'План контр. ({currency})', 'total_fact_volume': f'Факт контр. ({currency})',
+        'total_plan_income': f'План пост. ({currency})', 'total_fact_income': f'Факт пост. ({currency})'
     }
-    # Оставляем только существующие колонки
-    avail_cols = [c for c in month_cols_map.keys() if c in df_months.columns]
-    df_months = df_months[avail_cols].rename(columns=month_cols_map)
 
-    # Лист 2: По проектам
-    df_projects = pd.DataFrame(all_projects_rows)
-    proj_cols_map = {
-        'month': 'Месяц',
-        'complex_name': 'Проект',
-        'plan_units': 'План (шт)', 'fact_units': 'Факт (шт)', 'percent_fact_units': '% Вып. (шт)',
-        'plan_volume': 'План (контрактация)', 'fact_volume': 'Факт (контрактация)',
-        'percent_fact_volume': '% Вып. (контр.)',
-        'plan_income': 'План (поступления)', 'fact_income': 'Факт (поступления)',
-        'percent_fact_income': '% Вып. (пост.)',
-        'expected_income': 'Ожидаемые поступления'
-    }
-    avail_cols = [c for c in proj_cols_map.keys() if c in df_projects.columns]
-    # Сортируем: сначала месяц, потом имя проекта
-    if 'complex_name' in df_projects.columns:
-        df_projects.sort_values(by=['month', 'complex_name'], inplace=True)
-    df_projects = df_projects[avail_cols].rename(columns=proj_cols_map)
+    def format_df(rows, mapping):
+        df = pd.DataFrame(rows)
+        avail = [c for c in mapping.keys() if c in df.columns]
+        return df[avail].rename(columns=mapping)
 
-    # Лист 3: По типам недвижимости
-    df_types = pd.DataFrame(all_types_rows)
-    type_cols_map = {
-        'month': 'Месяц',
-        'property_type': 'Тип недвижимости',
-        'total_plan_units': 'План (шт)', 'total_fact_units': 'Факт (шт)', 'percent_fact_units': '% Вып. (шт)',
-        'total_plan_volume': 'План (контрактация)', 'total_fact_volume': 'Факт (контрактация)',
-        'percent_fact_volume': '% Вып. (контр.)',
-        'total_plan_income': 'План (поступления)', 'total_fact_income': 'Факт (поступления)',
-        'percent_fact_income': '% Вып. (пост.)',
-        'expected_income': 'Ожидаемые поступления'
-    }
-    avail_cols = [c for c in type_cols_map.keys() if c in df_types.columns]
-    if 'property_type' in df_types.columns:
-        df_types.sort_values(by=['month', 'property_type'], inplace=True)
-    df_types = df_types[avail_cols].rename(columns=type_cols_map)
-
-    # Запись в Excel
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_months.to_excel(writer, sheet_name='Свод по месяцам', index=False)
-        df_projects.to_excel(writer, sheet_name='По проектам', index=False)
-        df_types.to_excel(writer, sheet_name='По типам', index=False)
+        format_df(all_months_rows, cols_map).to_excel(writer, sheet_name='Свод по месяцам', index=False)
+        format_df(all_projects_rows, cols_map).to_excel(writer, sheet_name='По проектам', index=False)
+        format_df(all_types_rows, cols_map).to_excel(writer, sheet_name='По типам', index=False)
 
     output.seek(0)
     return output

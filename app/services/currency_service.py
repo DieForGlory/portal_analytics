@@ -6,9 +6,51 @@ from app.core.extensions import db
 from app.models.finance_models import CurrencySettings
 from flask import current_app
 from ..core.db_utils import get_default_session
+from datetime import date, timedelta
+from app.models.finance_models import DailyCurrencyRate
 
-# API Центрального Банка Узбекистана для курса доллара
 CBU_API_URL = "https://cbu.uz/ru/arkhiv-kursov-valyut/json/USD/"
+def sync_historical_rates(start_year=2020):
+    """Загружает курсы валют из ЦБ начиная с указанного года по текущий день."""
+    default_session = get_default_session()
+    start_date = date(start_year, 1, 1)
+    end_date = date.today()
+
+    current_date = start_date
+    headers = {'User-Agent': 'Mozilla/5.0'}
+
+    while current_date <= end_date:
+        # Проверяем наличие в БД, чтобы не дублировать запросы
+        if not default_session.get(DailyCurrencyRate, current_date):
+            date_str = current_date.strftime('%Y-%m-%d')
+            url = f"https://cbu.uz/ru/arkhiv-kursov-valyut/json/USD/{date_str}/"
+            try:
+                resp = requests.get(url, headers=headers, timeout=5, verify=False)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data:
+                        new_rate = DailyCurrencyRate(date=current_date, rate=float(data[0]['Rate']))
+                        default_session.add(new_rate)
+                if current_date.day == 1:  # Коммит каждую неделю для надежности
+                    default_session.commit()
+            except Exception as e:
+                print(f"Error for {date_str}: {e}")
+
+        current_date += timedelta(days=1)
+
+    default_session.commit()
+
+
+def get_rate_for_date(target_date):
+    """Возвращает курс на дату. Если настройки требуют исторический курс — берет из БД, иначе текущий эффективный."""
+    settings = _get_settings()
+    if not settings.use_historical_rate:
+        return settings.effective_rate
+
+    rate_record = get_default_session().get(DailyCurrencyRate, target_date)
+    return rate_record.rate if rate_record else settings.effective_rate
+# API Центрального Банка Узбекистана для курса доллара
+
 
 
 def _get_settings():
