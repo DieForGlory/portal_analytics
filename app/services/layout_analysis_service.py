@@ -40,7 +40,7 @@ class LayoutAnalysisService:
             inv_q = inv_q.filter(EstateSell.estate_sell_category == mysql_prop_key)
 
         for unit in inv_q.all():
-            name = unit.plans_name or "Не указано"
+            name = unit.flatClass or "Не указано"
             layout_map[name]['inventory'] += 1
 
             # Расчет цены дна для остатка
@@ -50,7 +50,7 @@ class LayoutAnalysisService:
                 layout_map[name]['total_area'] += unit.estate_area
 
         # 3. Сбор данных по продажам (Sales)
-        sales_q = mysql_session.query(EstateSell.plans_name).join(EstateDeal).filter(
+        sales_q = mysql_session.query(EstateSell.flatClass).join(EstateDeal).filter(
             EstateSell.house_id.in_(house_ids),
             EstateDeal.deal_status_name.in_(sold_statuses)
         )
