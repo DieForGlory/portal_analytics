@@ -109,19 +109,80 @@ def process_discounts_from_excel(file_path: str, version_id: int):
 
 def generate_discount_template_excel():
     from .data_service import get_all_complex_names
-    print("[DISCOUNT SERVICE] Генерация шаблона скидок...")
+    print("[DISCOUNT SERVICE] Генерация заполненного шаблона скидок...")
+
+    planning_session = get_planning_session()
     complex_names = get_all_complex_names()
-    headers = ['ЖК', 'Тип недвижимости', 'Тип оплаты', 'Дата кадастра', 'МПП', 'РОП', 'КД', 'ОПТ', 'ГД', 'Холдинг', 'Акционер', 'Акция']
+
+    # 1. Получаем активную версию и её скидки для предзаполнения
+    active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+    existing_discounts = {}
+
+    if active_version:
+        # Создаем карту: (ЖК, Тип недвижимости, Тип оплаты) -> объект скидки
+        existing_discounts = {
+            (d.complex_name, d.property_type, d.payment_method): d
+            for d in active_version.discounts
+        }
+        print(f"[DISCOUNT SERVICE] Найдена активная версия №{active_version.version_number}, подгружаем данные.")
+
+    headers = ['ЖК', 'Тип недвижимости', 'Тип оплаты', 'Дата кадастра', 'МПП', 'РОП', 'КД', 'ОПТ', 'ГД', 'Холдинг',
+               'Акционер', 'Акция']
     data = []
+
+    percentage_fields = ['mpp', 'rop', 'kd', 'opt', 'gd', 'holding', 'shareholder', 'action']
+
     for name in complex_names:
         for prop_type in planning_models.PropertyType:
             for payment_method in planning_models.PaymentMethod:
-                row = {'ЖК': name, 'Тип недвижимости': prop_type.value, 'Тип оплаты': payment_method.value, 'Дата кадастра': '', 'МПП': 0, 'РОП': 0, 'КД': 0, 'ОПТ': 0, 'ГД': 0, 'Холдинг': 0, 'Акционер': 0, 'Акция': 0}
+                # Ищем существующую скидку в базе
+                discount_obj = existing_discounts.get((name, prop_type, payment_method))
+
+                # Базовая структура строки
+                row = {
+                    'ЖК': name,
+                    'Тип недвижимости': prop_type.value,
+                    'Тип оплаты': payment_method.value,
+                    'Дата кадастра': ''
+                }
+
+                # Если скидка есть, заполняем данными (переводим из долей в целые проценты для удобства редактирования)
+                if discount_obj:
+                    row['Дата кадастра'] = discount_obj.cadastre_date if discount_obj.cadastre_date else ''
+                    for field in percentage_fields:
+                        val = getattr(discount_obj, field) or 0.0
+                        # Записываем как целое число (0.05 -> 5.0),
+                        # так как _normalize_percentage при загрузке корректно обработает значения > 1
+                        header_name = field.upper() if field != 'action' else 'Акция'
+                        if field == 'shareholder': header_name = 'Акционер'  # Соответствие заголовкам
+
+                        # Сопоставляем технические имена полей с заголовками Excel
+                        header_map = {
+                            'mpp': 'МПП', 'rop': 'РОП', 'kd': 'КД', 'opt': 'ОПТ',
+                            'gd': 'ГД', 'holding': 'Холдинг', 'shareholder': 'Акционер', 'action': 'Акция'
+                        }
+                        row[header_map[field]] = val * 100.0
+                else:
+                    # Если данных нет, заполняем нулями
+                    for field in percentage_fields:
+                        header_map = {
+                            'mpp': 'МПП', 'rop': 'РОП', 'kd': 'КД', 'opt': 'ОПТ',
+                            'gd': 'ГД', 'holding': 'Холдинг', 'shareholder': 'Акционер', 'action': 'Акция'
+                        }
+                        row[header_map[field]] = 0
+
                 data.append(row)
+
+    # 2. Формируем Excel
     df = pd.DataFrame(data, columns=headers)
     output = io.BytesIO()
-    df.to_excel(output, index=False, sheet_name='Шаблон скидок')
+
+    # Используем xlsxwriter для настройки форматирования (опционально)
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Текущие скидки')
+
     output.seek(0)
+    print(f"[DISCOUNT SERVICE] Шаблон успешно сформирован. Строк: {len(data)}")
     return output
 
 

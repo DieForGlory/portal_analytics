@@ -15,8 +15,9 @@ REMAINDER_STATUSES = ["Маркетинговый резерв", "Подбор"]
 
 def calculate_new_prices(complex_name, property_type_ru, percent_change, excluded_ids=None):
     """
-    Рассчитывает новые цены с учетом списка исключенных ID.
-    Для объектов в списке excluded_ids повышение цены не применяется (изменение = 0%).
+    Рассчитывает новые цены с логикой перераспределения повышения.
+    Сумма повышения, приходящаяся на исключенные объекты, равномерно распределяется на остальные.
+    Возвращает: (technical_results, stats_with_action, stats_no_action)
     """
     if excluded_ids is None:
         excluded_ids = []
@@ -30,7 +31,7 @@ def calculate_new_prices(complex_name, property_type_ru, percent_change, exclude
 
         active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
         if not active_version:
-            return None, "Нет активной версии скидок"
+            return None, None, "Нет активной версии скидок"
 
         discount = planning_session.query(planning_models.Discount).filter_by(
             version_id=active_version.id,
@@ -39,86 +40,115 @@ def calculate_new_prices(complex_name, property_type_ru, percent_change, exclude
             payment_method=planning_models.PaymentMethod.FULL_PAYMENT
         ).first()
 
-        total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0) if discount else 0
-        discount_multiplier = 1 - total_discount_rate
+        # Расчет коэффициентов скидок
+        total_rate_no_action = 0
+        total_rate_with_action = 0
+        if discount:
+            total_rate_no_action = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
+            total_rate_with_action = total_rate_no_action + (discount.action or 0)
 
-        houses = mysql_session.query(EstateHouse).filter_by(complex_name=complex_name).all()
-        house_map = {h.id: h.name for h in houses}
-        house_ids = list(house_map.keys())
+        mult_with = 1 - total_rate_with_action
+        mult_no = 1 - total_rate_no_action
+        current_res_fee = RESERVATION_FEE if property_type_ru == 'Квартира' else 0
 
         all_objects = mysql_session.query(EstateSell).filter(
-            EstateSell.house_id.in_(house_ids),
+            EstateSell.house_id.in_(
+                mysql_session.query(EstateHouse.id).filter_by(complex_name=complex_name)
+            ),
             EstateSell.estate_sell_category == mysql_key
         ).all()
 
+        # --- ЛОГИКА РАЗМЫТИЯ (РАСЧЕТ ЭФФЕКТИВНОГО ПРОЦЕНТА) ---
+        sum_net_all = 0.0
+        sum_net_non_excluded = 0.0
+
+        for obj in all_objects:
+            if not obj.estate_price or not obj.estate_area or obj.estate_area <= 0:
+                continue
+            net_val = (obj.estate_price - current_res_fee)
+            sum_net_all += net_val
+            if obj.id not in excluded_ids:
+                sum_net_non_excluded += net_val
+
+        if sum_net_non_excluded > 0:
+            adjusted_percent = percent_change * (sum_net_all / sum_net_non_excluded)
+        else:
+            adjusted_percent = percent_change
+
+        # --- ИНИЦИАЛИЗАЦИЯ СТАТИСТИКИ ДЛЯ ДВУХ ВАРИАНТОВ ---
+        def init_stats(discount_rate, base_pct, adj_pct):
+            return {
+                'complex_name': complex_name, 'prop_type': property_type_ru, 'usd_rate': usd_rate,
+                'total_units_project': len(all_objects), 'remainder_units': 0, 'remainder_sqm': 0.0,
+                'discount_pct': round(discount_rate * 100, 2),
+                'percent_change': round(base_pct * 100, 2),
+                'adjusted_percent': round(adj_pct * 100, 2),
+                'floor_prices_before': [], 'floor_prices_after': [],
+                'floor_totals_before': [], 'floor_totals_after': [],
+                'final_totals_before': 0.0, 'final_totals_after': 0.0,
+                'by_house_rooms': {}, 'by_floor': {}, 'by_rooms_comparison': {}
+            }
+
+        stats_with = init_stats(total_rate_with_action, percent_change, adjusted_percent)
+        stats_no = init_stats(total_rate_no_action, percent_change, adjusted_percent)
+
         excel_results = []
-        stats = {
-            'complex_name': complex_name,
-            'prop_type': property_type_ru,
-            'total_units_project': len(all_objects),
-            'remainder_units': 0,
-            'remainder_sqm': 0.0,
-            'discount_pct': round(total_discount_rate * 100, 2),
-            'percent_change': round(percent_change * 100, 2),
-            'floor_prices_before': [], 'floor_prices_after': [],
-            'floor_totals_before': [], 'floor_totals_after': [],
-            'final_totals_before': 0.0, 'final_totals_after': 0.0,
-            'usd_rate': usd_rate,
-            'by_house_rooms': {},
-            'by_floor': {},
-            'by_rooms_comparison': {}
-        }
+        house_map = {h.id: h.name for h in mysql_session.query(EstateHouse).filter_by(complex_name=complex_name).all()}
 
         for obj in all_objects:
             if not obj.estate_price or not obj.estate_area or obj.estate_area <= 0:
                 continue
 
-            # Определение процента изменения для конкретного объекта:
-            # Если ID в списке исключений, используем 0, иначе стандартный процент.
-            current_unit_percent = 0 if obj.id in excluded_ids else percent_change
+            unit_increase_pct = 0 if obj.id in excluded_ids else adjusted_percent
 
-            c_floor_total_uzs = (obj.estate_price - RESERVATION_FEE) * discount_multiplier
-            c_floor_sqm_usd = (c_floor_total_uzs / obj.estate_area) / usd_rate
-
-            # Применение индивидуального процента к цене за кв.м.
-            n_floor_sqm_usd = c_floor_sqm_usd * (1 + current_unit_percent)
-
-            n_floor_total_uzs = (n_floor_sqm_usd * usd_rate) * obj.estate_area
-            n_estate_price = (n_floor_total_uzs / discount_multiplier) + RESERVATION_FEE
-
+            # 1. Расчет для технического реестра (Sheet1) — всегда по текущей схеме (с акцией)
+            c_net_with = (obj.estate_price - current_res_fee) * mult_with
+            c_sqm_usd_with = (c_net_with / obj.estate_area) / usd_rate
+            n_sqm_usd_with = c_sqm_usd_with * (1 + unit_increase_pct)
+            n_estate_price = ((n_sqm_usd_with * usd_rate * obj.estate_area) / mult_with) + current_res_fee
             excel_results.append({'Id обьекта': obj.id, 'Новая стоимость': round(n_estate_price, -3)})
 
+            # 2. Сбор статистики только для остатков
             if obj.estate_sell_status_name in REMAINDER_STATUSES:
-                stats['remainder_units'] += 1
-                stats['remainder_sqm'] += obj.estate_area
-                stats['floor_prices_before'].append(c_floor_sqm_usd)
-                stats['floor_prices_after'].append(n_floor_sqm_usd)
-                stats['floor_totals_before'].append(c_floor_total_uzs / usd_rate)
-                stats['floor_totals_after'].append(n_floor_total_uzs / usd_rate)
-                stats['final_totals_before'] += obj.estate_price / usd_rate
-                stats['final_totals_after'] += n_estate_price / usd_rate
+                _fill_stats(obj, stats_with, mult_with, unit_increase_pct, current_res_fee, usd_rate, house_map)
+                _fill_stats(obj, stats_no, mult_no, unit_increase_pct, current_res_fee, usd_rate, house_map)
 
-                h_name = house_map.get(obj.house_id, "Неизвестно")
-                hr_key = (h_name, obj.estate_rooms or 0)
-                if hr_key not in stats['by_house_rooms']:
-                    stats['by_house_rooms'][hr_key] = []
-                stats['by_house_rooms'][hr_key].append(n_floor_sqm_usd)
-
-                fl_key = obj.estate_floor or 0
-                if fl_key not in stats['by_floor']:
-                    stats['by_floor'][fl_key] = []
-                stats['by_floor'][fl_key].append(n_floor_sqm_usd)
-
-                rooms = obj.estate_rooms or 0
-                if rooms not in stats['by_rooms_comparison']:
-                    stats['by_rooms_comparison'][rooms] = {'before': [], 'after': []}
-                stats['by_rooms_comparison'][rooms]['before'].append(c_floor_sqm_usd)
-                stats['by_rooms_comparison'][rooms]['after'].append(n_floor_sqm_usd)
-
-        return excel_results, stats
+        return excel_results, stats_with, stats_no
     finally:
         mysql_session.close()
         planning_session.close()
+
+
+def _fill_stats(obj, stats, multiplier, unit_pct, fee, rate, house_map):
+    """Вспомогательная функция для наполнения словаря статистики."""
+    c_net = (obj.estate_price - fee) * multiplier
+    c_sqm_usd = (c_net / obj.estate_area) / rate
+    n_sqm_usd = c_sqm_usd * (1 + unit_pct)
+
+    stats['remainder_units'] += 1
+    stats['remainder_sqm'] += obj.estate_area
+    stats['floor_prices_before'].append(c_sqm_usd)
+    stats['floor_prices_after'].append(n_sqm_usd)
+
+    # Стоимость конкретного объекта (чистая)
+    c_total_bottom_usd = c_net / rate
+    n_total_bottom_usd = (n_sqm_usd * obj.estate_area)
+
+    stats['floor_totals_before'].append(c_total_bottom_usd)
+    stats['floor_totals_after'].append(n_total_bottom_usd)
+
+    # ИСПРАВЛЕНО: Теперь суммируем чистую стоимость (Bottom Price), а не грязную
+    stats['final_totals_before'] += c_total_bottom_usd
+    stats['final_totals_after'] += n_total_bottom_usd
+
+    h_name = house_map.get(obj.house_id, "Неизвестно")
+    hr_key = (h_name, obj.estate_rooms or 0)
+    stats['by_house_rooms'].setdefault(hr_key, []).append(n_sqm_usd)
+    stats['by_floor'].setdefault(obj.estate_floor or 0, []).append(n_sqm_usd)
+
+    rm_cmp = stats['by_rooms_comparison'].setdefault(obj.estate_rooms or 0, {'before': [], 'after': []})
+    rm_cmp['before'].append(c_sqm_usd)
+    rm_cmp['after'].append(n_sqm_usd)
 
 
 def _set_border(ws, cell_range):
@@ -128,7 +158,7 @@ def _set_border(ws, cell_range):
             cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
 
 
-def generate_pricelist_excel(results, stats):
+def generate_pricelist_excel(results, stats_with, stats_no):
     output = io.BytesIO()
     wb = Workbook()
 
@@ -139,9 +169,19 @@ def generate_pricelist_excel(results, stats):
     for res in results:
         ws1.append([res['Id обьекта'], res['Новая стоимость']])
 
-    # Лист 2: На подпись
-    ws = wb.create_sheet("На_подпись")
+    # Лист 2: На подпись (с учетом акций)
+    _draw_analytical_sheet(wb.create_sheet("На_подпись"), stats_with)
 
+    # Лист 3: На подпись (без учета акций)
+    _draw_analytical_sheet(wb.create_sheet("На_подпись_без_акции"), stats_no)
+
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+def _draw_analytical_sheet(ws, stats):
+    """Отрисовка полной структуры аналитической таблицы на листе Excel."""
     f_header = Font(bold=True, name='Arial', size=11)
     f_bold = Font(bold=True, name='Arial', size=10)
     a_center = Alignment(horizontal='center', vertical='center')
@@ -152,7 +192,6 @@ def generate_pricelist_excel(results, stats):
     ws.column_dimensions['B'].width = 45
     ws.column_dimensions['C'].width = 18
     ws.column_dimensions['D'].width = 18
-    ws.column_dimensions['E'].width = 15
     for col in ['F', 'G', 'H', 'I', 'J', 'L', 'M', 'N', 'O']:
         ws.column_dimensions[col].width = 15
 
@@ -160,13 +199,11 @@ def generate_pricelist_excel(results, stats):
     metadata = [
         ("Проект", stats['complex_name']),
         ("Тип недвижимости", stats['prop_type']),
-        ("Всего квартир в проекте, шт.", stats['total_units_project']),
         ("Всего товарного запаса, шт", stats['remainder_units']),
         ("Всего товарного запаса, кв.м", round(stats['remainder_sqm'], 2)),
         ("Сумма регламентных скидок, %", f"{stats['discount_pct']}%"),
-        ("Средняя площадь товарного запаса, кв.м",
-         round(stats['remainder_sqm'] / stats['remainder_units'], 2) if stats['remainder_units'] > 0 else 0),
-        ("Процент повышения цены дна, %", f"{stats['percent_change']}%")
+        ("Целевой процент повышения, %", f"{stats['percent_change']}%"),
+        ("Эффективный % (после размытия), %", f"{stats['adjusted_percent']}%")
     ]
 
     for i, (label, value) in enumerate(metadata, 2):
@@ -175,10 +212,10 @@ def generate_pricelist_excel(results, stats):
         ws.cell(row=i, column=3, value=value)
         _set_border(ws, f'B{i}:C{i}')
 
-    # 2. Общее изменение цены
+    # 2. Таблица Изменение цены
     ws.merge_cells('B11:D11')
     hdr = ws['B11']
-    hdr.value = "Изменение цены"
+    hdr.value = "Изменение цены (чистая стоимость дна)"
     hdr.font = f_header
     hdr.alignment = a_center
     hdr.fill = fill_yellow
@@ -217,12 +254,13 @@ def generate_pricelist_excel(results, stats):
             ws.cell(row=row_idx, column=4, value=round(n_vals[idx], 0))
         _set_border(ws, f'B{row_idx}:D{row_idx}')
 
-    ws.cell(row=22, column=2, value="Общая стоимость остатков, $").font = f_header
+    # Общая стоимость (Bottom Price)
+    ws.cell(row=22, column=2, value="Общая чистая стоимость остатков, $").font = f_header
     ws.cell(row=22, column=3, value=round(stats['final_totals_before'], 0))
     ws.cell(row=22, column=4, value=round(stats['final_totals_after'], 0))
     _set_border(ws, 'B22:D22')
 
-    # --- НОВАЯ ТАБЛИЦА: Типология (Было/Стало) ---
+    # 3. Таблица типологии (Было/Стало)
     start_row_typ = 25
     ws.merge_cells(f'B{start_row_typ}:H{start_row_typ}')
     typ_hdr = ws.cell(row=start_row_typ, column=2, value="Сравнение по типологии (цена дна за кв.м, $)")
@@ -244,7 +282,6 @@ def generate_pricelist_excel(results, stats):
     for rooms in sorted(stats['by_rooms_comparison'].keys()):
         data = stats['by_rooms_comparison'][rooms]
         b_vals, a_vals = data['before'], data['after']
-
         ws.cell(row=curr_row, column=2, value=f"{rooms}-комн")
         ws.cell(row=curr_row, column=3, value=round(min(b_vals), 2))
         ws.cell(row=curr_row, column=4, value=round(min(a_vals), 2))
@@ -252,51 +289,37 @@ def generate_pricelist_excel(results, stats):
         ws.cell(row=curr_row, column=6, value=round(sum(a_vals) / len(a_vals), 2))
         ws.cell(row=curr_row, column=7, value=round(max(b_vals), 2))
         ws.cell(row=curr_row, column=8, value=round(max(a_vals), 2))
-
         _set_border(ws, f'B{curr_row}:H{curr_row}')
         curr_row += 1
 
-    # --- Таблица справа 1: По домам и комнатности ---
-    s_col, row = 6, 2
-    headers = ["Дом", "Комн.", "Мин. цена $", "Сред. цена $", "Макс. цена $"]
-    for i, h in enumerate(headers):
-        cell = ws.cell(row=row, column=s_col + i, value=h)
-        cell.font = f_bold
-        cell.fill = fill_gray
-        cell.alignment = a_center
+    # 4. Таблицы справа
+    row = 2
+    for i, h in enumerate(["Дом", "Комн.", "Мин. цена $", "Сред. цена $", "Макс. цена $"]):
+        cell = ws.cell(row=row, column=6 + i, value=h)
+        cell.font, cell.fill, cell.alignment = f_bold, fill_gray, a_center
     _set_border(ws, f'F{row}:J{row}')
 
     row += 1
-    sorted_hr = sorted(stats['by_house_rooms'].items(), key=lambda x: (x[0][0], x[0][1]))
-    for (h_name, rooms), prices in sorted_hr:
-        ws.cell(row=row, column=s_col, value=h_name)
-        ws.cell(row=row, column=s_col + 1, value=rooms)
-        ws.cell(row=row, column=s_col + 2, value=round(min(prices), 2))
-        ws.cell(row=row, column=s_col + 3, value=round(sum(prices) / len(prices), 2))
-        ws.cell(row=row, column=s_col + 4, value=round(max(prices), 2))
+    for (h_name, rooms), prices in sorted(stats['by_house_rooms'].items()):
+        ws.cell(row=row, column=6, value=h_name)
+        ws.cell(row=row, column=7, value=rooms)
+        ws.cell(row=row, column=8, value=round(min(prices), 2))
+        ws.cell(row=row, column=9, value=round(sum(prices) / len(prices), 2))
+        ws.cell(row=row, column=10, value=round(max(prices), 2))
         _set_border(ws, f'F{row}:J{row}')
         row += 1
 
-    # --- Таблица справа 2: По этажам ---
-    s_col_fl, row_fl = 12, 2
-    fl_headers = ["Этаж", "Мин. цена $", "Сред. цена $", "Макс. цена $"]
-    for i, h in enumerate(fl_headers):
-        cell = ws.cell(row=row_fl, column=s_col_fl + i, value=h)
-        cell.font = f_bold
-        cell.fill = fill_gray
-        cell.alignment = a_center
+    row_fl = 2
+    for i, h in enumerate(["Этаж", "Мин. цена $", "Сред. цена $", "Макс. цена $"]):
+        cell = ws.cell(row=row_fl, column=12 + i, value=h)
+        cell.font, cell.fill, cell.alignment = f_bold, fill_gray, a_center
     _set_border(ws, f'L{row_fl}:O{row_fl}')
 
     row_fl += 1
-    sorted_fl = sorted(stats['by_floor'].items(), key=lambda x: x[0])
-    for floor, prices in sorted_fl:
-        ws.cell(row=row_fl, column=s_col_fl, value=floor)
-        ws.cell(row=row_fl, column=s_col_fl + 1, value=round(min(prices), 2))
-        ws.cell(row=row_fl, column=s_col_fl + 2, value=round(sum(prices) / len(prices), 2))
-        ws.cell(row=row_fl, column=s_col_fl + 3, value=round(max(prices), 2))
+    for floor, prices in sorted(stats['by_floor'].items()):
+        ws.cell(row=row_fl, column=12, value=floor)
+        ws.cell(row=row_fl, column=13, value=round(min(prices), 2))
+        ws.cell(row=row_fl, column=14, value=round(sum(prices) / len(prices), 2))
+        ws.cell(row=row_fl, column=15, value=round(max(prices), 2))
         _set_border(ws, f'L{row_fl}:O{row_fl}')
         row_fl += 1
-
-    wb.save(output)
-    output.seek(0)
-    return output

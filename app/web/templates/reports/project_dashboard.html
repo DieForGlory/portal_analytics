@@ -381,77 +381,80 @@
     <div class="card card-glass">
         <div class="card-body">
             <h5 class="card-title mb-4">{{ _('Переоценка и создание прайс-листа') }}</h5>
+
             <form id="pricelistForm" action="{{ url_for('report.generate_pricelist_files', complex_name=data.complex_name) }}" method="POST">
-            <input type="hidden" name="excluded_ids" id="excludedIdsInput" value="">
+                <input type="hidden" name="excluded_ids" id="excludedIdsInput" value="">
 
-            <div class="row g-4 align-items-end mb-4">
-                <div class="col-md-4">
-                    <label class="form-label fw-bold">{{ _('Тип недвижимости') }}</label>
-                    <select name="property_type" id="propTypeSelect" class="form-select" required>
-                        {% for pt in property_types %}
-                        <option value="{{ pt }}" {{ 'selected' if selected_prop_type == pt }}>{{ _(pt) }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">{{ _('Повышение/Понижение (%%)') }}</label>
-                    <div class="input-group">
-                        <input type="number" name="percent" step="0.01" class="form-control" placeholder="5.5" required>
-                        <span class="input-group-text">%</span>
+                <div class="row g-4 align-items-end mb-4">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">{{ _('Тип недвижимости') }}</label>
+                        <select name="property_type" class="form-select" required>
+                            {% for pt in property_types %}
+                            <option value="{{ pt }}" {{ 'selected' if selected_prop_type == pt }}>{{ _(pt) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">{{ _('Повышение/Понижение (%%)') }}</label>
+                        <div class="input-group">
+                            <input type="number" name="percent" step="0.01" class="form-control" placeholder="5.5" required>
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="d-flex gap-2">
+                            <button type="submit" name="format" value="excel" class="btn btn-success flex-grow-1">
+                                <i class="bi bi-file-earmark-excel me-2"></i>{{ _('Excel') }}
+                            </button>
+                            <button type="submit" name="format" value="pptx" class="btn btn-primary flex-grow-1">
+                                <i class="bi bi-file-earmark-ppt me-2"></i>{{ _('Презентация') }}
+                            </button>
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-5">
-                    <div class="d-flex gap-2">
-                        <button type="submit" name="format" value="excel" class="btn btn-success flex-grow-1">
-                            <i class="bi bi-file-earmark-excel me-2"></i>{{ _('Excel') }}
-                        </button>
-                        <button type="submit" name="format" value="pptx" class="btn btn-primary flex-grow-1">
-                            <i class="bi bi-file-earmark-ppt me-2"></i>{{ _('Презентация') }}
-                        </button>
-                    </div>
+
+                <hr>
+                <h6 class="mb-3">{{ _('Исключить объекты из повышения (выберите из списка остатков):') }}</h6>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm modern-table" id="exclusionTable">
+                        <thead class="sticky-top bg-white">
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="selectAllExclusions" class="form-check-input"></th>
+                                <th>ID</th>
+                                <th>{{ _('Дом') }}</th>
+                                <th>{{ _('Этаж') }}</th>
+                                <th>{{ _('Комн.') }}</th>
+                                <th>{{ _('Площадь') }}</th>
+                                <th class="text-end">{{ _('Цена дна/м²') }}</th> <th class="text-end">{{ _('Стоимость дна') }}</th> </tr>
+                        </thead>
+                        <tbody>
+                            {% for unit in data.inventory_units %}
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input exclusion-checkbox" value="{{ unit.id }}"></td>
+                                <td>{{ unit.id }}</td>
+                                <td>{{ unit.house }}</td>
+                                <td>{{ unit.floor }}</td>
+                                <td>{{ unit.rooms }}</td>
+                                <td>{{ unit.area }} м²</td>
+                                <td class="text-end currency-value" data-uzs-value="{{ unit.bottom_price_sqm }}">
+                                    {{ "{:,.0f}".format(unit.bottom_price_sqm) }}
+                                </td>
+                                <td class="text-end fw-bold currency-value" data-uzs-value="{{ unit.bottom_price_total }}">
+                                    {{ "{:,.0f}".format(unit.bottom_price_total) }}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center text-muted p-4">{{ _('Нет доступных объектов.') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
-            </div>
-
-            <hr>
-
-            <h6 class="mb-3">{{ _('Исключить объекты из повышения (выберите из списка остатков):') }}</h6>
-            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                <table class="table table-sm modern-table" id="exclusionTable">
-                    <thead class="sticky-top bg-white">
-                        <tr>
-                            <th style="width: 40px;">
-                                <input type="checkbox" id="selectAllExclusions" class="form-check-input">
-                            </th>
-                            <th>ID</th>
-                            <th>{{ _('Дом') }}</th>
-                            <th>{{ _('Этаж') }}</th>
-                            <th>{{ _('Комн.') }}</th>
-                            <th>{{ _('Площадь') }}</th>
-                            <th class="text-end">{{ _('Текущая цена') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for unit in data.inventory_units %}
-                        <tr class="unit-row" data-prop-type="{{ unit.category }}">
-                            <td>
-                                <input type="checkbox" class="form-check-input exclusion-checkbox" value="{{ unit.id }}">
-                            </td>
-                            <td>{{ unit.id }}</td>
-                            <td>{{ unit.house }}</td>
-                            <td>{{ unit.floor }}</td>
-                            <td>{{ unit.rooms }}</td>
-                            <td>{{ unit.area }} м²</td>
-                            <td class="text-end currency-value" data-uzs-value="{{ unit.price }}">
-                                {{ "{:,.0f}".format(unit.price) }}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
-</div>
+  </div>
 
 {% endblock %}
 

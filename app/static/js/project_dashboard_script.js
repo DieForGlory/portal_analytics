@@ -267,18 +267,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const exclusionTable = document.getElementById('exclusionTable');
 
     if (pricelistForm) {
-        // Синхронизация чекбоксов со скрытым инпутом перед отправкой формы
+        // Собираем все отмеченные чекбоксы в скрытое поле перед отправкой формы
         pricelistForm.addEventListener('submit', function () {
             const checkedIds = Array.from(document.querySelectorAll('.exclusion-checkbox:checked'))
                 .map(cb => cb.value);
             excludedIdsInput.value = checkedIds.join(',');
         });
 
-        // Логика "Выбрать все"
+        // Работа кнопки "Выбрать все"
         if (selectAllCheck && exclusionTable) {
             selectAllCheck.addEventListener('change', function () {
-                const visibleCheckboxes = exclusionTable.querySelectorAll('tbody tr:not(.d-none) .exclusion-checkbox');
-                visibleCheckboxes.forEach(cb => cb.checked = selectAllCheck.checked);
+                const checkboxes = exclusionTable.querySelectorAll('.exclusion-checkbox');
+                checkboxes.forEach(cb => cb.checked = selectAllCheck.checked);
             });
         }
     }

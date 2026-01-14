@@ -559,9 +559,56 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
         complex_name, house_ids, mysql_prop_key, active_version,
         planning_session, mysql_session, sold_statuses, VALID_STATUSES
     )
-    # --- СБОРКА ИТОГОВОГО СЛОВАРЯ ---
+    discounts_map = {}
+    if active_version:
+        for pt_enum in planning_models.PropertyType:
+            d = planning_session.query(planning_models.Discount).filter_by(
+                version_id=active_version.id,
+                complex_name=complex_name,
+                property_type=pt_enum,
+                payment_method=planning_models.PaymentMethod.FULL_PAYMENT
+            ).first()
+            if d:
+                discounts_map[pt_enum.value] = (d.mpp or 0) + (d.rop or 0) + (d.kd or 0) + (d.action or 0)
+            else:
+                discounts_map[pt_enum.value] = 0
+
+    # 2. Получение списка остатков для выбора исключений
+    inventory_query = mysql_session.query(EstateSell).filter(
+        EstateSell.house_id.in_(house_ids),
+        EstateSell.estate_sell_status_name.in_(VALID_STATUSES)
+    )
+    if mysql_prop_key:
+        inventory_query = inventory_query.filter(EstateSell.estate_sell_category == mysql_prop_key)
+
+    inventory_units_raw = inventory_query.all()
+    inventory_units = []
+
+    for u in inventory_units_raw:
+        pt_ru = map_mysql_key_to_russian_value(u.estate_sell_category)
+        rate = discounts_map.get(pt_ru, 0)
+        deduction = 3_000_000 if pt_ru == 'Квартира' else 0
+
+        price = u.estate_price or 0
+        area = u.estate_area or 0
+
+        bottom_total = (price - deduction) * (1 - rate) if price > deduction else 0
+        bottom_sqm = bottom_total / area if area > 0 else 0
+
+        inventory_units.append({
+            'id': u.id,
+            'house': u.house.name,
+            'floor': u.estate_floor,
+            'rooms': u.estate_rooms,
+            'area': area,
+            'bottom_price_sqm': bottom_sqm,
+            'bottom_price_total': bottom_total
+        })
+
+    # --- ОБНОВИТЬ СЛОВАРЬ dashboard_data ---
     dashboard_data = {
         "complex_name": complex_name,
+        "inventory_units": inventory_units,  # Добавлено
         "kpi": {
             "total_deals_volume": total_deals_volume,
             "total_income": total_income,
@@ -571,8 +618,6 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
             "plan_fact_dynamics_yearly": yearly_plan_fact,
             "sales_analysis": sales_analysis,
             "price_dynamics": get_price_dynamics_data(complex_name, mysql_prop_key),
-
-            # --- НОВЫЕ ДАННЫЕ ---
             "payment_type_distribution": get_payment_type_distribution(complex_name, mysql_prop_key),
             "sales_pace_kpi": get_sales_pace_kpi(complex_name, mysql_prop_key)
         },
@@ -583,11 +628,10 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
     mysql_session.close()
     planning_session.close()
-
     return dashboard_data
 
 
-def get_project_passport_data(complex_name,property_type=None):
+def get_project_passport_data(complex_name: str):
     """
     Собирает все статические и динамические данные для "Паспорта проекта".
     """
@@ -601,26 +645,6 @@ def get_project_passport_data(complex_name,property_type=None):
     inventory_query = mysql_session.query(EstateSell).join(EstateHouse).filter(
         EstateHouse.complex_name == complex_name
     )
-    if property_type:
-        inventory_query = inventory_query.filter(EstateSell.estate_sell_category == property_type)
-
-    inventory_units = inventory_query.filter(
-        EstateSell.estate_sell_status_name.in_(REMAINDER_STATUSES)
-    ).all()
-
-    # Сериализуем для шаблона
-    data['inventory_units'] = [
-        {
-            'id': u.id,
-            'house': u.house.name,
-            'floor': u.estate_floor,
-            'rooms': u.estate_rooms,
-            'area': u.estate_area,
-            'price': u.estate_price
-        } for u in inventory_units
-    ]
-
-    return data
     # 1. Получаем ID домов в комплексе
     house_ids_query = mysql_session.query(EstateHouse.id).filter(EstateHouse.complex_name == complex_name)
     house_ids = [h[0] for h in house_ids_query.all()]

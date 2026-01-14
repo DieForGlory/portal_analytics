@@ -334,21 +334,25 @@ def generate_pricelist_files(complex_name):
         except ValueError:
             flash("Некорректный формат ID исключаемых объектов", "warning")
 
-    # Передаем список в сервис
-    results, stats = pricelist_service.calculate_new_prices(
+    # ИСПРАВЛЕНИЕ: Принимаем 3 значения (реестр, статистика с акцией, статистика без акции)
+    results, stats_with, stats_no = pricelist_service.calculate_new_prices(
         complex_name, prop_type, percent, excluded_ids=excluded_ids
     )
-    if results is None:  # Обработка ошибки (например, нет версии скидок)
-        flash(stats, "warning")
+
+    # В случае ошибки calculate_new_prices возвращает (None, None, "Текст ошибки")
+    if results is None:
+        error_msg = stats_no if stats_no else "Ошибка при расчете цен"
+        flash(error_msg, "warning")
         return redirect(url_for('report.project_dashboard', complex_name=complex_name))
 
     if file_format == 'excel':
-        # ИСПРАВЛЕНО: Добавлен аргумент stats
-        file_stream = pricelist_service.generate_pricelist_excel(results, stats)
+        # ИСПРАВЛЕНИЕ: Передаем все три объекта для генерации трех листов
+        file_stream = pricelist_service.generate_pricelist_excel(results, stats_with, stats_no)
         filename = f"Pricelist_Full_{complex_name}_{date.today()}.xlsx"
         mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     else:
-        file_stream = presentation_service.generate_pricelist_pptx(complex_name, prop_type, percent, stats)
+        # Для презентации используем основной вариант статистики (с акцией)
+        file_stream = presentation_service.generate_pricelist_pptx(complex_name, prop_type, percent, stats_with)
         filename = f"Pricelist_Analysis_{complex_name}.pptx"
         mimetype = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 

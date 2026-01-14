@@ -56,6 +56,7 @@
                                 </a>
                                 <ul class="dropdown-menu">
                                     <li><a class="dropdown-item" href="{{ url_for('report.plan_fact_report') }}">{{ _('План-факт отчет') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('report.sales_funnel') }}">{{ _('Воронка продаж') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.financial_model_selection') }}">{{ _('Финансовая модель') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.inventory_summary') }}">{{ _('Сводка по остаткам') }}</a></li>
                                     {% if current_user.can('view_inventory_report') %}
