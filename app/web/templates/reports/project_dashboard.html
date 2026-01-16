@@ -420,35 +420,35 @@
                         <thead class="sticky-top bg-white">
                             <tr>
                                 <th style="width: 40px;"><input type="checkbox" id="selectAllExclusions" class="form-check-input"></th>
-                                <th>ID</th>
-                                <th>{{ _('Дом') }}</th>
-                                <th>{{ _('Этаж') }}</th>
-                                <th>{{ _('Комн.') }}</th>
-                                <th>{{ _('Площадь') }}</th>
-                                <th class="text-end">{{ _('Цена дна/м²') }}</th> <th class="text-end">{{ _('Стоимость дна') }}</th> </tr>
+                                <th class="sortable" data-column="id">ID <i class="bi bi-arrow-down-up ms-1 small opacity-50"></i></th>
+                                <th class="sortable" data-column="type">{{ _('Тип недвижимости') }} <i class="bi bi-arrow-down-up ms-1 small opacity-50"></i></th>
+                                <th class="sortable" data-column="house">{{ _('Дом') }} <i class="bi bi-arrow-down-up ms-1 small opacity-50"></i></th>
+                                <th class="sortable" data-column="floor">{{ _('Этаж') }} <i class="bi bi-arrow-down-up ms-1 small opacity-50"></i></th>
+                                <th class="sortable" data-column="rooms">{{ _('Комн.') }} <i class="bi bi-arrow-down-up ms-1 small opacity-50"></i></th>
+                                <th class="sortable" data-column="area">{{ _('Площадь') }} <i class="bi bi-arrow-down-up ms-1 small opacity-50"></i></th>
+                                <th class="text-end sortable" data-column="price_sqm">{{ _('Цена дна/м²') }} <i class="bi bi-arrow-down-up ms-1 small opacity-50"></i></th>
+                                <th class="text-end sortable" data-column="price_total">{{ _('Стоимость дна') }} <i class="bi bi-arrow-down-up ms-1 small opacity-50"></i></th>
+                            </tr>
                         </thead>
                         <tbody>
                             {% for unit in data.inventory_units %}
-                            <tr>
-                                <td><input type="checkbox" class="form-check-input exclusion-checkbox" value="{{ unit.id }}"></td>
-                                <td>{{ unit.id }}</td>
-                                <td>{{ unit.house }}</td>
-                                <td>{{ unit.floor }}</td>
-                                <td>{{ unit.rooms }}</td>
-                                <td>{{ unit.area }} м²</td>
-                                <td class="text-end currency-value" data-uzs-value="{{ unit.bottom_price_sqm }}">
-                                    {{ "{:,.0f}".format(unit.bottom_price_sqm) }}
-                                </td>
-                                <td class="text-end fw-bold currency-value" data-uzs-value="{{ unit.bottom_price_total }}">
-                                    {{ "{:,.0f}".format(unit.bottom_price_total) }}
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="8" class="text-center text-muted p-4">{{ _('Нет доступных объектов.') }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
+                                <tr>
+                                    <td><input type="checkbox" class="form-check-input exclusion-checkbox" value="{{ unit.id }}"></td>
+                                    <td>{{ unit.id }}</td>
+                                    <td>{{ _(unit.property_type) }}</td>
+                                    <td>{{ unit.house }}</td>
+                                    <td>{{ unit.floor }}</td>
+                                    <td>{{ unit.rooms }}</td>
+                                    <td>{{ unit.area }} м²</td>
+                                    <td class="text-end currency-value" data-uzs-value="{{ unit.bottom_price_sqm }}">
+                                        {{ "{:,.0f}".format(unit.bottom_price_sqm) }}
+                                    </td>
+                                    <td class="text-end fw-bold currency-value" data-uzs-value="{{ unit.bottom_price_total }}">
+                                        {{ "{:,.0f}".format(unit.bottom_price_total) }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
                     </table>
                 </div>
             </form>
@@ -462,6 +462,47 @@
 {{ super() }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+    const table = document.getElementById('exclusionTable');
+    if (!table) return;
+
+    const headers = table.querySelectorAll('th.sortable');
+    const tbody = table.querySelector('tbody');
+
+    headers.forEach(header => {
+        header.addEventListener('click', () => {
+            const columnIndex = Array.from(header.parentNode.children).indexOf(header);
+            const isAsc = header.classList.contains('sort-asc');
+
+            // Сброс иконок у всех
+            headers.forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            const sortedRows = rows.sort((a, b) => {
+                // Очистка данных: убираем пробелы (разделители тысяч), "м2" и прочее
+                let valA = a.children[columnIndex].innerText.replace(/[\s\u00A0]/g, '').replace('м²', '').trim();
+                let valB = b.children[columnIndex].innerText.replace(/[\s\u00A0]/g, '').replace('м²', '').trim();
+
+                // Попытка конвертации в число
+                const numA = parseFloat(valA);
+                const numB = parseFloat(valB);
+
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return isAsc ? numB - numA : numA - numB;
+                }
+
+                // Строковое сравнение
+                return isAsc
+                    ? valB.localeCompare(valA, 'ru')
+                    : valA.localeCompare(valB, 'ru');
+            });
+
+            header.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
+            tbody.append(...sortedRows);
+        });
+    });
+});
     document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 12650 }}";
     const charts_json_data = JSON.parse('{{ charts_json|safe }}');
 

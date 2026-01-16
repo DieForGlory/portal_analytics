@@ -364,7 +364,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
     mysql_session = get_mysql_session()
     planning_session = get_planning_session()
     sold_statuses = ["Сделка в работе", "Сделка проведена"]
-    VALID_STATUSES = ["Маркетинговый резерв", "Подбор"]
+    VALID_STATUSES = ["Маркетинговый резерв", "Подбор", "Бронь"]
 
     mysql_prop_key = None
     if property_type:
@@ -597,6 +597,7 @@ def get_project_dashboard_data(complex_name: str, property_type: str = None):
 
         inventory_units.append({
             'id': u.id,
+            'property_type': pt_ru,  # ДОБАВИТЬ ЭТУ СТРОКУ
             'house': u.house.name,
             'floor': u.estate_floor,
             'rooms': u.estate_rooms,

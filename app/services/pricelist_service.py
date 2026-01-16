@@ -106,7 +106,11 @@ def calculate_new_prices(complex_name, property_type_ru, percent_change, exclude
             c_sqm_usd_with = (c_net_with / obj.estate_area) / usd_rate
             n_sqm_usd_with = c_sqm_usd_with * (1 + unit_increase_pct)
             n_estate_price = ((n_sqm_usd_with * usd_rate * obj.estate_area) / mult_with) + current_res_fee
-            excel_results.append({'Id обьекта': obj.id, 'Новая стоимость': round(n_estate_price, -3)})
+            excel_results.append({
+                'Id обьекта': obj.id,
+                'Тип недвижимости': property_type_ru,
+                'Новая стоимость': round(n_estate_price, -3)
+            })
 
             # 2. Сбор статистики только для остатков
             if obj.estate_sell_status_name in REMAINDER_STATUSES:
@@ -165,10 +169,11 @@ def generate_pricelist_excel(results, stats_with, stats_no):
     # Лист 1: Технический реестр
     ws1 = wb.active
     ws1.title = "PriceList"
-    ws1.append(["Id обьекта", "Новая стоимость"])
+    header = ["Id обьекта", "Тип недвижимости", "Новая стоимость"]
+    ws1.append(header)
     for res in results:
-        ws1.append([res['Id обьекта'], res['Новая стоимость']])
-
+        ws1.append([res['Id обьекта'], res['Тип недвижимости'], res['Новая стоимость']])
+    ws1.auto_filter.ref = ws1.dimensions
     # Лист 2: На подпись (с учетом акций)
     _draw_analytical_sheet(wb.create_sheet("На_подпись"), stats_with)
 
