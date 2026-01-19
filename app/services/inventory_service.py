@@ -4,13 +4,16 @@ from collections import defaultdict
 from ..core.db_utils import get_mysql_session, get_planning_session, get_default_session
 import pandas as pd
 import io
+from datetime import datetime # Добавлено для работы с датами
 from app.models.planning_models import map_mysql_key_to_russian_value
 from app.models.planning_models import DiscountVersion, PaymentMethod, PropertyType
-from app.models.estate_models import EstateSell, EstateHouse
+# ДОБАВЛЕНО EstateDeal в импорт
+from app.models.estate_models import EstateSell, EstateHouse, EstateDeal
 from app.models.finance_models import FinanceOperation
 from app.models.exclusion_models import ExcludedComplex
 from app.core.extensions import db
 from sqlalchemy import func
+
 
 
 def generate_commercial_inventory_excel(currency: str, usd_rate: float):
@@ -272,20 +275,17 @@ def get_inventory_summary_data():
 
 
 def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float):
-    """
-    Создает Excel-файл. Поддерживает как группировку по ЖК, так и по (ЖК, Дом).
-    """
     flat_data = []
     is_usd = currency == 'USD'
     rate = usd_rate if is_usd else 1.0
     currency_suffix = f', {currency}'
 
-    value_header = 'Стоимость остатков (дно)' + currency_suffix
-    price_header = 'Цена дна, за м²' + currency_suffix
+    # Универсальные заголовки для текущих и исторических данных
+    value_header = 'Оценочная стоимость' + currency_suffix
+    price_header = 'Средняя цена за м²' + currency_suffix
     expected_header = 'Ожидаемые поступления' + currency_suffix
 
     for key, prop_types_data in summary_data.items():
-        # Определяем ключи
         if isinstance(key, tuple):
             complex_name, house_name = key
         else:
@@ -302,7 +302,6 @@ def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float)
                 price_header: metrics['avg_price_m2'] / rate,
                 expected_header: metrics.get('expected_income', 0) / rate
             }
-            # Если есть данные по дому, добавляем в строку
             if house_name != "-":
                 row['Дом'] = house_name
             flat_data.append(row)
@@ -311,8 +310,6 @@ def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float)
         return None
 
     df = pd.DataFrame(flat_data)
-
-    # Упорядочиваем колонки, чтобы Дом был после Проекта
     cols = list(df.columns)
     if 'Дом' in cols:
         cols.insert(1, cols.pop(cols.index('Дом')))
@@ -324,8 +321,9 @@ def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float)
         workbook = writer.book
         worksheet = writer.sheets['Сводка по остаткам']
 
-        header_format = workbook.add_format(
-            {'bold': True, 'text_wrap': True, 'valign': 'top', 'fg_color': '#D7E4BC', 'border': 1})
+        header_format = workbook.add_format({'bold': True, 'text_wrap': True, 'fg_color': '#D7E4BC', 'border': 1})
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_format)
         money_format_uzs = workbook.add_format({'num_format': '#,##0', 'border': 1})
         money_format_usd = workbook.add_format({'num_format': '"$"#,##0.00', 'border': 1})
         area_format = workbook.add_format({'num_format': '#,##0.00', 'border': 1})
@@ -360,3 +358,122 @@ def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float)
 
     output.seek(0)
     return output
+
+
+def get_historical_inventory_data(target_date_str: str):
+    """
+    Рассчитывает товарные запасы на дату T:
+    Inventory(T) = Текущий свободный склад + Сделки, заключенные после T.
+    """
+    mysql_session = get_mysql_session()
+    planning_session = get_planning_session()
+    default_session = get_default_session()
+
+    try:
+        target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return get_inventory_summary_data()
+
+    # 1. Скидки и исключения
+    excluded_complex_names = {c.complex_name for c in default_session.query(ExcludedComplex).all()}
+    active_version = planning_session.query(DiscountVersion).filter_by(is_active=True).first()
+    discounts_map = {}
+    if active_version:
+        discounts_map = {(d.complex_name, d.property_type): d for d in active_version.discounts
+                         if d.payment_method == PaymentMethod.FULL_PAYMENT}
+
+    # 2. ТЕКУЩИЙ СВОБОДНЫЙ СКЛАД (Pool 1)
+    valid_statuses = ["Маркетинговый резерв", "Подбор", "Бронь"]
+    current_unsold = mysql_session.query(EstateSell).options(db.joinedload(EstateSell.house)).filter(
+        EstateSell.estate_sell_status_name.in_(valid_statuses),
+        EstateSell.estate_area > 0
+    ).all()
+
+    # 3. ПРОДАЖИ ЗА ПЕРИОД (Pool 2)
+    # Берем сделки, созданные после target_date, которые НЕ отменены
+    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
+    sold_in_delta = mysql_session.query(EstateSell).join(EstateDeal).options(
+        db.joinedload(EstateSell.house),
+        db.joinedload(EstateSell.deals)
+    ).filter(
+        effective_date > target_date,
+        EstateDeal.deal_status_name.notin_(["Отменено", "Не определён"])
+    ).all()
+
+    # 4. ОБЪЕДИНЕНИЕ И АГРЕГАЦИЯ
+    # Используем dict по ID, чтобы избежать дублей (если объект в брони и попал в оба списка)
+    pool = {}
+
+    # Сначала текущие остатки (Цена Дна)
+    for sell in current_unsold:
+        if not sell.house or sell.house.complex_name in excluded_complex_names:
+            continue
+
+        # Расчет цены дна
+        price_val = 0
+        if sell.estate_price:
+            try:
+                rus_cat = map_mysql_key_to_russian_value(sell.estate_sell_category)
+                prop_type_enum = PropertyType(rus_cat)
+                discount = discounts_map.get((sell.house.complex_name, prop_type_enum))
+
+                deduction = 3_000_000 if prop_type_enum == PropertyType.FLAT else 0
+                price_for_calc = sell.estate_price - deduction
+                if price_for_calc > 0 and discount:
+                    total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.kd or 0)
+                    price_val = price_for_calc * (1 - total_discount_rate)
+                else:
+                    price_val = price_for_calc
+            except:
+                price_val = sell.estate_price
+
+        pool[sell.id] = {
+            'complex': sell.house.complex_name,
+            'house': sell.house.name,
+            'category': map_mysql_key_to_russian_value(sell.estate_sell_category),
+            'area': sell.estate_area,
+            'value': price_val
+        }
+
+    # Затем добавляем проданные (Цена по договору)
+    for sell in sold_in_delta:
+        if sell.id in pool or not sell.house or sell.house.complex_name in excluded_complex_names:
+            continue
+
+        # Берем сумму последней активной сделки
+        valid_deals = [d for d in sell.deals if d.deal_status_name not in ["Отменено", "Не определён"]]
+        deal_price = max(valid_deals, key=lambda d: d.id).deal_sum if valid_deals else 0
+
+        pool[sell.id] = {
+            'complex': sell.house.complex_name,
+            'house': sell.house.name,
+            'category': map_mysql_key_to_russian_value(sell.estate_sell_category),
+            'area': sell.estate_area,
+            'value': deal_price or 0
+        }
+
+    # 5. СТРУКТУРИРОВАНИЕ ДЛЯ ШАБЛОНА
+    summary_by_house = defaultdict(lambda: defaultdict(lambda: {'units': 0, 'total_area': 0.0, 'total_value': 0.0}))
+    summary_by_complex = defaultdict(lambda: defaultdict(lambda: {'units': 0, 'total_area': 0.0, 'total_value': 0.0}))
+    overall_summary = defaultdict(lambda: {'units': 0, 'total_area': 0.0, 'total_value': 0.0})
+
+    for item in pool.values():
+        c_name, h_name, cat = item['complex'], item['house'], item['category']
+
+        for target in [summary_by_house[(c_name, h_name)][cat],
+                       summary_by_complex[c_name][cat],
+                       overall_summary[cat]]:
+            target['units'] += 1
+            target['total_area'] += item['area']
+            target['total_value'] += item['value']
+
+    # Расчет средних
+    for d in [summary_by_house, summary_by_complex]:
+        for p_data in d.values():
+            for m in p_data.values():
+                m['avg_price_m2'] = m['total_value'] / m['total_area'] if m['total_area'] > 0 else 0
+    for m in overall_summary.values():
+        m['avg_price_m2'] = m['total_value'] / m['total_area'] if m['total_area'] > 0 else 0
+
+    planning_session.close()
+    return summary_by_complex, overall_summary, summary_by_house

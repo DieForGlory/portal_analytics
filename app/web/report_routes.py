@@ -28,6 +28,7 @@ from app.services import (
     pricelist_service,
     presentation_service
 )
+from app.services.inventory_service import get_inventory_summary_data, get_historical_inventory_data
 from app.web.forms import UploadPlanForm, UploadManagerPlanForm
 from ..models.finance_models import FinanceOperation
 from ..models.estate_models import EstateHouse
@@ -129,15 +130,22 @@ def export_expected_income_details():
 @login_required
 @permission_required('view_inventory_report')
 def inventory_summary():
+    target_date = request.args.get('date')
     group_by = request.args.get('group_by', 'complex')
 
-    # Вызываем сервис, который возвращает 3 набора данных
-    summary_by_complex, overall_summary, summary_by_house = inventory_service.get_inventory_summary_data()
+    if target_date:
+        # Распаковываем кортеж из 3-х элементов
+        summary_by_complex, overall_summary, summary_by_house = inventory_service.get_historical_inventory_data(target_date)
+        title = f"Товарные запасы на {target_date} (Цены дна)"
+    else:
+        # Распаковываем текущие данные
+        summary_by_complex, overall_summary, summary_by_house = inventory_service.get_inventory_summary_data()
+        title = "Товарные запасы (Цены дна)"
 
-    # Выбираем данные для таблицы в зависимости от группировки
+    # Теперь 'data' — это словарь, и метод .items() в шаблоне сработает
     data = summary_by_house if group_by == 'house' else summary_by_complex
 
-    # Рассчитываем общие итоги (Grand Totals) по всем типам недвижимости
+    # Рассчитываем общие итоги
     grand_totals = {
         'total_count': sum(m['units'] for m in overall_summary.values()),
         'total_area': sum(m['total_area'] for m in overall_summary.values()),
@@ -148,8 +156,8 @@ def inventory_summary():
 
     return render_template(
         'reports/inventory_summary.html',
-        title="Товарные запасы (Цены дна)",
-        data=data,  # Вложенный словарь {Проект: {Тип: Метрики}}
+        title=title,
+        data=data,
         totals=grand_totals,
         group_by=group_by,
         usd_to_uzs_rate=usd_rate
@@ -271,18 +279,25 @@ def export_deal_registry():
 @permission_required('view_inventory_report')
 def export_inventory_summary():
     selected_currency = request.args.get('currency', 'UZS')
+    target_date = request.args.get('date') # Получаем дату из параметров запроса
     usd_rate = currency_service.get_current_effective_rate()
 
-    # Изменено: получаем summary_by_house
-    _, _, summary_by_house = inventory_service.get_inventory_summary_data()
+    if target_date:
+        # Вызываем исторический расчет
+        _, _, summary_data = inventory_service.get_historical_inventory_data(target_date)
+        filename = f"inventory_at_{target_date}_{selected_currency}.xlsx"
+    else:
+        # Текущие данные
+        _, _, summary_data = inventory_service.get_inventory_summary_data()
+        filename = f"inventory_current_{selected_currency}.xlsx"
 
-    # Изменено: передаем summary_by_house в генератор excel
-    excel_stream = inventory_service.generate_inventory_excel(summary_by_house, selected_currency, usd_rate)
+    # Генерация Excel (summary_data здесь — это summary_by_house)
+    excel_stream = inventory_service.generate_inventory_excel(summary_data, selected_currency, usd_rate)
 
     if excel_stream is None:
         flash("Нет данных для экспорта.", "warning")
-        return redirect(url_for('report.inventory_summary'))
-    filename = f"inventory_summary_{selected_currency}.xlsx"
+        return redirect(url_for('report.inventory_summary', date=target_date))
+
     return send_file(
         excel_stream,
         download_name=filename,

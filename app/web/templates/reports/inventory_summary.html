@@ -5,6 +5,15 @@
     <h1 class="h3 mb-0 text-body">{{ title }}</h1>
 
     <div class="d-flex align-items-center gap-3">
+        <div class="input-group input-group-sm" style="width: 220px;">
+            <span class="input-group-text bg-body-secondary border-secondary-subtle">На дату</span>
+            <input type="date" id="inventoryDate" class="form-control bg-body border-secondary-subtle"
+                   value="{{ request.args.get('date', '') }}">
+            <button class="btn btn-outline-primary" type="button" onclick="applyDateFilter()">
+                <i class="bi bi-search"></i>
+            </button>
+        </div>
+
         <div class="input-group input-group-sm" style="width: 250px;">
             <span class="input-group-text bg-body-secondary border-secondary-subtle"><i class="bi bi-layers"></i></span>
             <select class="form-select bg-body border-secondary-subtle" id="groupBySelect">
@@ -145,14 +154,28 @@
     document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 12650 }}";
 
     /**
+     * Переход на расчет на указанную дату
+     */
+    function applyDateFilter() {
+        const date = document.getElementById('inventoryDate').value;
+        const url = new URL(window.location.href);
+        if (date) {
+            url.searchParams.set('date', date);
+        } else {
+            url.searchParams.delete('date');
+        }
+        window.location.href = url.toString();
+    }
+
+    /**
      * Функция для принудительного обновления ВСЕХ ссылок экспорта
      */
     function forceUpdateAllExportUrls() {
         const isUsd = document.getElementById('currencyToggle').checked;
         const currency = isUsd ? 'USD' : 'UZS';
         const groupBy = document.getElementById('groupBySelect').value;
+        const date = document.getElementById('inventoryDate').value;
 
-        // Находим все ссылки, которые ведут на экспорт
         const links = [
             document.getElementById('export-link'),
             document.getElementById('export-comm-link')
@@ -160,12 +183,12 @@
 
         links.forEach(link => {
             if (link) {
-                // Отрезаем старые параметры и формируем URL заново
                 const baseUrl = link.getAttribute('href').split('?')[0];
                 const url = new URL(baseUrl, window.location.origin);
 
                 url.searchParams.set('currency', currency);
-                // Для основной выгрузки добавляем группировку
+                if (date) url.searchParams.set('date', date);
+
                 if (link.id === 'export-link') {
                     url.searchParams.set('group_by', groupBy);
                 }
@@ -175,7 +198,7 @@
         });
     }
 
-    // Слушатель смены группировки (перезагружает страницу)
+    // Слушатель смены группировки
     document.getElementById('groupBySelect').addEventListener('change', function() {
         const url = new URL(window.location.href);
         url.searchParams.set('group_by', this.value);
@@ -184,8 +207,6 @@
 
     // Слушатель переключателя валют
     document.getElementById('currencyToggle').addEventListener('change', function() {
-        // Задержка 100мс, чтобы дать отработать глобальному report_script.js,
-        // а затем мы "поверх" обновляем ссылки правильно.
         setTimeout(forceUpdateAllExportUrls, 100);
     });
 
@@ -197,7 +218,6 @@
         });
     });
 
-    // Первичный вызов при загрузке страницы
     window.addEventListener('load', forceUpdateAllExportUrls);
 </script>
 <script src="{{ url_for('static', filename='js/report_script.js') }}"></script>
