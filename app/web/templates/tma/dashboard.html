@@ -1,0 +1,20 @@
+{% extends "tma/base_tma.html" %}
+
+{% block content %}
+    <h3 style="margin-top: 0;">Проекты компании</h3>
+
+    {% if complexes %}
+        <div class="project-list">
+            {% for complex in complexes %}
+                <div class="card">
+                    <div style="font-weight: bold; margin-bottom: 10px;">{{ complex }}</div>
+                    <a href="{{ url_for('tma.tma_project_detail', complex_name=complex) }}" class="btn-tma">
+                        Открыть паспорт
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>Список проектов пуст</p>
+    {% endif %}
+{% endblock %}
