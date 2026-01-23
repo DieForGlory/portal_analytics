@@ -105,7 +105,7 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(cancellation_bp)
         app.register_blueprint(news_bp)
         app.register_blueprint(ai_bp)
-        app.register_blueprint(tma_bp)
+        app.register_blueprint(tma_bp, url_prefix='/tma')
 
         @login_manager.user_loader
         def load_user(user_id):
