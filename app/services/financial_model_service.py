@@ -31,7 +31,14 @@ def get_financial_model_data(complex_name):
             func.trim(estate_models.EstateHouse.complex_name) == clean_name,
             finance_models.FinanceOperation.status_name == "Проведено",
             or_(
-                finance_models.FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
+                # Применение .notin_() вместо !=
+                finance_models.FinanceOperation.payment_type.notin_([
+                    "Возврат поступлений при отмене сделки",
+                    "Возврат при уменьшении стоимости",
+                    "безучпоступление",
+                    "Уступка права требования",
+                    "Бронь"
+                ]),
                 finance_models.FinanceOperation.payment_type.is_(None)
             )
         ).scalar() or 0.0

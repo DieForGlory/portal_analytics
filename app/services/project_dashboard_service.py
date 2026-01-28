@@ -897,7 +897,13 @@ def get_project_passport_data(complex_name: str):
     expected_payments = mysql_session.query(func.sum(FinanceOperation.summa)).join(EstateSell).filter(
         EstateSell.house_id.in_(house_ids),
         FinanceOperation.status_name == "К оплате",
-        FinanceOperation.payment_type != "Возврат поступлений при отмене сделки"
+        FinanceOperation.payment_type.notin_([
+            "Возврат поступлений при отмене сделки",
+            "Возврат при уменьшении стоимости",
+            "безучпоступление",
+            "Уступка права требования",
+            "Бронь"
+        ])
     ).scalar() or 0.0
     # =========================================================
     # === НАЧАЛО ИЗМЕНЕНИЙ: Вызываем новые функции ===

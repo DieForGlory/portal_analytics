@@ -107,7 +107,13 @@ def get_manager_performance_details(manager_id: int, year: int):
         extract('year', FinanceOperation.date_added) == year,
         FinanceOperation.status_name == "Проведено",
         or_(
-            FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
+            FinanceOperation.payment_type.notin_([
+                "Возврат поступлений при отмене сделки",
+                "Возврат при уменьшении стоимости",
+                "безучпоступление",
+                "Уступка права требования",
+                "Бронь"
+            ]),
             FinanceOperation.payment_type.is_(None)
         )
     ).group_by('month').all()
@@ -232,10 +238,18 @@ def generate_kpi_report_excel(year: int, month: int):
             extract('month', FinanceOperation.date_added) == month,
             FinanceOperation.status_name == "Проведено",
             or_(
-                FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
+                # Замена != на .notin_()
+                FinanceOperation.payment_type.notin_([
+                    "Возврат поступлений при отмене сделки",
+                    "Возврат при уменьшении стоимости",
+                    "безучпоступление",
+                    "Уступка права требования",
+                    "Бронь"
+                ]),
                 FinanceOperation.payment_type.is_(None)
             )
         ).scalar()
+
         fact_income = fact_income_query or 0.0
         kpi_bonus_uzs = calculate_manager_kpi(plan.plan_income, fact_income)
 

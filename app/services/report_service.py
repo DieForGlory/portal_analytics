@@ -85,6 +85,30 @@ def get_deal_registry_report_data(page=1, per_page=50):
     return report_data, pagination
 
 
+def get_fact_area_data(year: int, month: int, property_type: str):
+    """Сбор фактической площади проданных объектов за месяц."""
+    effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)  #
+    mysql_session = get_mysql_session()  #
+
+    # Используем select_from(EstateDeal) для предотвращения дублирования таблицы estate_houses в SQL-запросе
+    query = mysql_session.query(
+        EstateHouse.complex_name,
+        func.sum(EstateSell.estate_area).label('fact_area')
+    ).select_from(EstateDeal) \
+        .join(EstateSell, EstateDeal.estate_sell_id == EstateSell.id) \
+        .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
+        .filter(
+        EstateDeal.deal_status_name.in_(["Сделка в работе", "Сделка проведена"]),  #
+        extract('year', effective_date) == year,  #
+        extract('month', effective_date) == month,  #
+    )
+
+    if property_type != 'All':
+        query = query.filter(EstateSell.estate_sell_category == map_russian_to_mysql_key(property_type))  #
+
+    results = query.group_by(EstateHouse.complex_name).all()  #
+    return {row.complex_name: float(row.fact_area or 0) for row in results}
+
 def generate_deal_registry_excel():
     mysql_session = get_mysql_session()
     all_sells = mysql_session.query(EstateSell).options(
@@ -285,7 +309,13 @@ def get_fact_income_data(year: int, month: int, property_type: str):
         FinanceOperation.status_name == "Проведено",
         extract('year', FinanceOperation.date_added) == year,
         extract('month', FinanceOperation.date_added) == month,
-        FinanceOperation.payment_type != "Возврат поступлений при отмене сделки"
+        FinanceOperation.payment_type.notin_([
+            "Возврат поступлений при отмене сделки",
+            "Возврат при уменьшении стоимости",
+            "безучпоступление",
+            "Уступка права требования",
+            "Бронь"
+        ])
     )
 
     if property_type != 'All':
@@ -321,7 +351,14 @@ def get_expected_income_data(year: int, month: int, property_type: str):
         FinanceOperation.status_name == "К оплате",
         extract('year', FinanceOperation.date_to) == year,
         extract('month', FinanceOperation.date_to) == month,
-        FinanceOperation.payment_type != "Возврат поступлений при отмене сделки"
+        # Корректный фильтр для исключения списка значений
+        FinanceOperation.payment_type.notin_([
+            "Возврат поступлений при отмене сделки",
+            "Возврат при уменьшении стоимости",
+            "безучпоступление",
+            "Уступка права требования",
+            "Бронь"
+        ])
     )
 
     if property_type != 'All':
@@ -355,7 +392,13 @@ def get_refund_data(year: int, month: int, property_type: str):
         FinanceOperation.status_name == "К оплате",
         extract('year', FinanceOperation.date_to) == year,
         extract('month', FinanceOperation.date_to) == month,
-        FinanceOperation.payment_type == "Возврат поступлений при отмене сделки"
+        # Использование .in_() для проверки вхождения в список
+        FinanceOperation.payment_type.in_([
+            "Возврат поступлений при отмене сделки",
+            "Возврат при уменьшении стоимости",
+            "безучпоступление",
+            "Уступка права требования"
+        ])
     )
     if property_type != 'All':
         # --- ИСПРАВЛЕНИЕ: Переводим 'Квартира' в 'flat' ---
@@ -822,20 +865,22 @@ def get_sales_pace_comparison_data():
 
 
 def generate_annual_report_excel(year: int, currency: str = 'UZS', rate: float = 1.0):
-    """Генерирует годовой отчет с конвертацией финансовых показателей."""
-    all_projects_rows = []
-    all_types_rows = []
-    all_months_rows = []
+    """Генерирует годовой отчет с четырьмя листами, включая детальный факт проданных площадей и сумм."""
+    all_projects_rows = [] #
+    all_types_rows = [] #
+    all_months_rows = [] #
+    alisher_rows = []
 
-    # Список ключей, содержащих денежные суммы
     money_keys = [
         'plan_volume', 'fact_volume', 'plan_income', 'fact_income', 'expected_income',
         'total_plan_volume', 'total_fact_volume', 'total_plan_income', 'total_fact_income'
-    ]
+    ] #
 
-    for month in range(1, 13):
+    property_types = [pt.value for pt in planning_models.PropertyType] #
+
+    for month in range(1, 13): #
         # 1. Данные по проектам
-        proj_data, totals, _ = generate_plan_fact_report(year, month, 'All')
+        proj_data, totals, _ = generate_plan_fact_report(year, month, 'All') #
         for row in proj_data:
             r = row.copy()
             r['month'] = month
@@ -848,7 +893,7 @@ def generate_annual_report_excel(year: int, currency: str = 'UZS', rate: float =
             all_projects_rows.append(r)
 
         # 2. Данные по типам недвижимости
-        type_data = get_monthly_summary_by_property_type(year, month)
+        type_data = get_monthly_summary_by_property_type(year, month) #
         for row in type_data:
             r = row.copy()
             r['month'] = month
@@ -863,7 +908,7 @@ def generate_annual_report_excel(year: int, currency: str = 'UZS', rate: float =
             all_types_rows.append(r)
 
         # 3. Общие итоги за месяц
-        t = totals.copy()
+        t = totals.copy() #
         t['month'] = month
         if isinstance(t.get('expected_income'), dict):
             t['expected_income'] = t['expected_income'].get('sum', 0)
@@ -875,7 +920,33 @@ def generate_annual_report_excel(year: int, currency: str = 'UZS', rate: float =
         if 'expected_income_ids' in t: del t['expected_income_ids']
         all_months_rows.append(t)
 
-    # Динамические заголовки для Excel
+        # 4. Сбор детального факта (Лист "Все что надо Алишеру")
+        for pt in property_types:
+            units_map = get_fact_data(year, month, pt) #
+            area_map = get_fact_area_data(year, month, pt)
+            volume_map = get_fact_volume_data(year, month, pt) #
+            income_map = get_fact_income_data(year, month, pt) #
+
+            # Объединяем список всех ЖК, где были транзакции
+            month_complexes = set(units_map.keys()) | set(area_map.keys()) | set(volume_map.keys()) | set(income_map.keys())
+
+            for complex_name in month_complexes:
+                row = {
+                    'month': month,
+                    'complex_name': complex_name,
+                    'property_type': pt,
+                    'fact_units': units_map.get(complex_name, 0),
+                    'fact_area': area_map.get(complex_name, 0),
+                    'fact_volume': volume_map.get(complex_name, 0),
+                    'fact_income': income_map.get(complex_name, 0)
+                }
+
+                if currency == 'USD' and rate > 0:
+                    row['fact_volume'] /= rate
+                    row['fact_income'] /= rate
+
+                alisher_rows.append(row)
+
     cols_map = {
         'month': 'Месяц', 'complex_name': 'Проект', 'property_type': 'Тип',
         'plan_units': 'План (шт)', 'fact_units': 'Факт (шт)', 'percent_fact_units': '% Вып. (шт)',
@@ -884,22 +955,25 @@ def generate_annual_report_excel(year: int, currency: str = 'UZS', rate: float =
         'expected_income': f'Ожид. пост. ({currency})',
         'total_plan_units': 'План (шт)', 'total_fact_units': 'Факт (шт)',
         'total_plan_volume': f'План контр. ({currency})', 'total_fact_volume': f'Факт контр. ({currency})',
-        'total_plan_income': f'План пост. ({currency})', 'total_fact_income': f'Факт пост. ({currency})'
-    }
+        'total_plan_income': f'План пост. ({currency})', 'total_fact_income': f'Факт пост. ({currency})',
+        'fact_area': 'Площадь (кв.м)',
+    } #
 
     def format_df(rows, mapping):
         df = pd.DataFrame(rows)
-        avail = [c for c in mapping.keys() if c in df.columns]
-        return df[avail].rename(columns=mapping)
+        if df.empty: return df
+        avail = [c for c in mapping.keys() if c in df.columns] #
+        return df[avail].rename(columns=mapping) #
 
-    output = io.BytesIO()
+    output = io.BytesIO() #
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        format_df(all_months_rows, cols_map).to_excel(writer, sheet_name='Свод по месяцам', index=False)
-        format_df(all_projects_rows, cols_map).to_excel(writer, sheet_name='По проектам', index=False)
-        format_df(all_types_rows, cols_map).to_excel(writer, sheet_name='По типам', index=False)
+        format_df(all_months_rows, cols_map).to_excel(writer, sheet_name='Свод по месяцам', index=False) #
+        format_df(all_projects_rows, cols_map).to_excel(writer, sheet_name='По проектам', index=False) #
+        format_df(all_types_rows, cols_map).to_excel(writer, sheet_name='По типам', index=False) #
+        format_df(alisher_rows, cols_map).to_excel(writer, sheet_name='Все что надо Алишеру', index=False)
 
-    output.seek(0)
-    return output
+    output.seek(0) #
+    return output #
 
 def calculate_grand_totals(year, month):
     """

@@ -80,7 +80,14 @@ def calculate_manager_kpi(manager_id, year, month):
         extract('month', FinanceOperation.date_added) == month,
         FinanceOperation.status_name == "Проведено",
         or_(
-            FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
+            # Замена != на .notin_()
+            FinanceOperation.payment_type.notin_([
+                "Возврат поступлений при отмене сделки",
+                "Возврат при уменьшении стоимости",
+                "безучпоступление",
+                "Уступка права требования",
+                "Бронь"
+            ]),
             FinanceOperation.payment_type.is_(None)
         )
     ).scalar()

@@ -154,14 +154,20 @@ def get_inventory_summary_data():
     # 4. Получаем все ожидаемые поступления (с разбивкой по домам)
     expected_income_query = mysql_session.query(
         EstateHouse.complex_name,
-        EstateHouse.name,  # Добавляем имя дома в выборку
+        EstateHouse.name,
         EstateSell.estate_sell_category,
         func.sum(FinanceOperation.summa)
     ).join(EstateSell, FinanceOperation.estate_sell_id == EstateSell.id) \
         .join(EstateHouse, EstateSell.house_id == EstateHouse.id) \
         .filter(
         FinanceOperation.status_name == "К оплате",
-        FinanceOperation.payment_type != "Возврат поступлений при отмене сделки"
+        FinanceOperation.payment_type.notin_([
+            "Возврат поступлений при отмене сделки",
+            "Возврат при уменьшении стоимости",
+            "безучпоступление",
+            "Уступка права требования",
+            "Бронь"
+        ])
     )
 
     if excluded_complex_names:
